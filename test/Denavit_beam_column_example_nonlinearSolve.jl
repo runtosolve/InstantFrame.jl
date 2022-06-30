@@ -23,6 +23,15 @@ free_dof = [4; 5; 6]
 Ke = InstantFrame.define_local_elastic_stiffness_matrix(I, A, E, L)
 Kg = InstantFrame.define_local_geometric_stiffness_matrix(P, L)
 
+K=Ke+Kg
+
+
+Ku=F 
+
+Ku-F = 0 
+
+
+
 #Partition external force vector and elastic stiffness matrix.
 Ff = F[free_dof]
 Ke_ff = Ke[free_dof, free_dof]
@@ -54,13 +63,6 @@ probN = NonlinearProblem{false}(residual, u0, p)
 
 
 
-using NonlinearSolve, StaticArrays
-
-f(u,p) = u .* u .- p
-u0 = @SVector[1.0, 1.0]
-p = 2.0
-probN = NonlinearProblem{false}(f, u0, p)
-solver = solve(probN, NewtonRaphson(), tol = 1e-9)
 
 
 

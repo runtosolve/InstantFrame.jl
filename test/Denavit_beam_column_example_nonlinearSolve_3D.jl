@@ -1,4 +1,4 @@
-using InstantFrame, NLsolve, Plots, LinearAlgebra, BenchmarkTools
+using InstantFrame, NonlinearSolve, Plots, LinearAlgebra, BenchmarkTools, StaticArrays
 
 #Denavit, M. D., & Hajjar, J. F. (2013). Description of geometric nonlinearity for beam-column analysis in OpenSees.
 
@@ -6,7 +6,10 @@ using InstantFrame, NLsolve, Plots, LinearAlgebra, BenchmarkTools
 
 #Define frame inputs.
 E = 29000.0  #ksi
-I = 37.1 #in^4
+J = 10.0 #in^4
+ν = 0.30
+Iy = 37.1 #in^4
+Ix = 110.0 #in^4
 A = 9.12 #in^2
 L = 180.0 #in
 P = -50.0 #kips
@@ -14,14 +17,16 @@ H = -1.0 #kips
 ρ = 492.0 / 32.17 / 1000.0 / 12^4 #kips * s^2 / in^4
  
 #Define the frame loading as an external force vector. There is an axial load of 50 kips and a lateral load of 1 kip.
-F = [0., 0., 0., P, H, 0.0]
+F = [0., 0., 0., 0., 0., 0., P, H, -H, 0., 0., 0.]
 
 #Define the frame boundary conditions.
-free_dof = [4; 5; 6]
+free_dof = [7; 8; 9; 10; 11; 12]
 
 #Define the frame elastic stiffness.
-Ke = InstantFrame.define_local_elastic_stiffness_matrix(I, A, E, L)
-Kg = InstantFrame.define_local_geometric_stiffness_matrix(P, L)
+Ke = InstantFrame.define_local_elastic_stiffness_matrix(Ix, Iy, A, J, E, ν, L)
+
+#Define frame geometric stiffness.
+Kg = InstantFrame.define_local_3D_geometric_stiffness_matrix(P, L)
 
 #Partition external force vector and elastic stiffness matrix.
 Ff = F[free_dof]
@@ -34,10 +39,22 @@ Kff = Ke_ff + Kg_ff
 #Define the deformation initial guess for the nonlinear solver.
 deformation_guess = Ke_ff \ Ff
 
-#Solve for the beam deformations.
-@btime solution = nlsolve((R,U) ->InstantFrame.second_order_analysis_residual!(R, U, Kff, Ff), deformation_guess, method=:newton)
 
-#Newton-Raphson is faster here, than trust region...
+p = [Kff, Ff]
+
+function residual(u, p)
+
+    Kff, Ff = p
+
+    Kff * u - Ff
+
+end
+
+u0 = deformation_guess
+u0 = @SVector [u0[i] for i in eachindex(u0)]
+probN = NonlinearProblem{false}(residual, u0, p)
+@benchmark solver = solve(probN, NewtonRaphson(), tol = 1e-9)
+
 
 
 #Get the frame deformed shape.

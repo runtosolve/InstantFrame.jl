@@ -1,12 +1,14 @@
 module InstantFrame
 
-struct Nodes
+using SparseArrays, StaticArrays, LinearAlgebra, Rotations
 
-    x::Array{Float64}
-    y::Array{Float64}
-    z::Array{Float64}
+# struct Nodes
 
-end
+#     x::Array{Float64}
+#     y::Array{Float64}
+#     z::Array{Float64}
+
+# end
 
 struct CrossSections
 
@@ -40,18 +42,19 @@ struct Members
     type::Array{String}
     start_node::Array{Int64}
     end_node::Array{Int64}
+    β::Array{Float64}
     start_connection::Array{String}
     end_connection::Array{String}
     cross_section::Array{String}
     material::Array{String}
-
+  
 end
 
 
-function define_local_elastic_stiffness_matrix(I, A, E, L)
+function define_local_elastic_element_stiffness_matrix(I, A, E, L)
 
 
-    ke = [E*A/L   0.          0.          E*A/L    0.          0.
+    ke = [E*A/L   0.          0.          -E*A/L    0.          0.
          0.     12E*I/L^3    6E*I/L^2     0.      -12E*I/L^3   6E*I/L^2
          0.     6E*I/L^2     4E*I/L       0.      -6E*I/L^2    2E*I/L
          -E*A/L  0.          0.          E*A/L    0.          0.
@@ -61,6 +64,56 @@ function define_local_elastic_stiffness_matrix(I, A, E, L)
     return ke
 
 end
+
+
+function define_local_elastic_stiffness_matrix(Ix, Iy, A, J, E, ν, L)
+
+
+    G = E/(2*(1+ν))
+
+    ke = zeros(Float64, (12, 12))
+
+    ke[1, 1] = E*A/L
+    ke[1, 6] = -E*A/L
+    ke[2, 2] = 12*E*Iy/L^3
+    ke[2, 6] = 6*E*Iy/L^3
+    ke[2, 8] = -12*E*Iy/L^3
+    ke[2, 12] = 6*E*Iy/L^2
+    ke[3, 3] = 12*E*Ix/L^3
+    ke[3, 5] = -6*E*Ix/L^2
+    ke[3, 9] = -12*E*Ix/L^3
+    ke[3, 11] = -6*E*Ix/L^2
+    ke[4, 4] = G*J/L
+    ke[4, 10] = -G*J/L
+    ke[5, 5] = 4*E*Ix/L
+    ke[5, 9] = 6*E*Ix/L^2
+    ke[5, 11] = 2*E*Ix/L
+    ke[6, 6] = 4*E*Iy/L
+    ke[6, 8] = -6*E*Iy/L^2
+    ke[6, 12] = 2*E*Iy/L
+    ke[7, 7] = E*A/L
+    ke[8, 8] = 12*E*Iy/L^3
+    ke[8, 12] = -6*E*Iy/L^2
+    ke[9, 9] = 12*E*Ix/L^3
+    ke[9, 11] = 6*E*Ix/L^2
+    ke[10, 10] = G*J/L
+    ke[11, 11] = 4*E*Ix/L
+    ke[12, 12] = 4*E*Iy/L
+
+    for i = 1:12
+
+        for j = 1:12
+
+            ke[j, i] = ke[i, j]
+
+        end
+        
+    end
+
+    return ke
+
+end
+
 
 
 function define_local_geometric_stiffness_matrix(P, L)
@@ -77,32 +130,172 @@ function define_local_geometric_stiffness_matrix(P, L)
 
 end
 
+function define_local_3D_geometric_stiffness_matrix(P, L)
 
 
-function define_global_transformation(βo)
+    kg = zeros(Float64, (12, 12))
 
-    T = [ cos(βo)     sin(βo)     0.  0.          0.      0.
-                    -sin(βo)    cos(βo)     0.  0.          0.      0.
-                    0.          0.          1.  0.          0.      0.
-                    0.          0.          0.  cos(βo)     sin(βo) 0.
-                    0.          0.          0.  -sin(βo)    cos(βo) 1.]
-                    
-    return T
+    kg[1, 1] = P/L
+    kg[1, 7] = -P/L
+    kg[2, 2] = 6/5*P/L
+    kg[2, 6] = P/10
+    kg[2, 8] = -6/5*P/L
+    kg[2, 12] = P/10
+    kg[3, 3] = 6/5*P/L
+    kg[3, 5] = -P/10
+    kg[3, 9] = -6/5*P/L 
+    kg[3, 11] = -P/10
+    kg[5, 5] = 2/15*P*L 
+    kg[5, 9] =  P/10
+    kg[5, 11] = -P*L/30
+    kg[6, 6] = 2/15*P*L
+    kg[6, 8] = -P/10
+    kg[6, 12] = -P*L/30
+    kg[7, 7] = P/L
+    kg[8, 8] = 6/5*P/L
+    kg[8, 12] = - P/10
+    kg[9, 9] = 6/5 * P/L
+    kg[9, 11] = P/10
+    kg[11, 11] = 2/15*P*L
+    kg[12, 12] = 2/15*P*L
+    
+    for i = 1:12
+
+        for j = 1:12
+
+            kg[j, i] = kg[i, j]
+
+        end
+        
+    end
+    
+
+    return kg
 
 end
 
 
-function second_order_analysis_residual!(R, U, K, F)
+function define_local_3D_mass_matrix(A, L, ρ)
 
-    for i=1:length(F)
- 
-       R[i] = transpose(K[i,:]) * U - F[i]
- 
+
+    m = zeros(Float64, (12, 12))
+
+    m[1, 1] = 140
+    m[1, 7] = 70
+    m[2, 2] = 156
+    m[2, 6] = 22L
+    m[2, 8] = 54
+    m[2, 12] = -13L
+    m[3, 3] = 156
+    m[3, 5] = -22L
+    m[3, 9] = 54 
+    m[3, 11] = 13L
+    m[4, 4] = 140Io/A
+    m[4, 10] = 70Io/A
+    m[5, 5] = 4L^2 
+    m[5, 9] =  -13L
+    m[5, 11] = -3L^2
+    m[6, 6] = 4L^2
+    m[6, 8] = 13L
+    m[6, 12] = -3L^2
+    m[7, 7] = 140
+    m[8, 8] = 156
+    m[8, 12] = -22L
+    m[9, 9] = 156
+    m[9, 11] = 22L
+    m[10, 10] = 140Io/A
+    m[11, 11] = 4L^2
+    m[12, 12] = 4L^2
+    
+    for i = 1:12
+
+        for j = 1:12
+
+            m[j, i] = m[i, j]
+
+        end
+        
     end
+    
+    m = m .* (ρ*A*L)/420
+
+    return m
+
+end
+
+
+
+
+# function define_global_transformation(βo)
+
+#     T = [ cos(βo)     sin(βo)     0.  0.          0.      0.
+#                     -sin(βo)    cos(βo)     0.  0.          0.      0.
+#                     0.          0.          1.  0.          0.      0.
+#                     0.          0.          0.  cos(βo)     sin(βo) 0.
+#                     0.          0.          0.  -sin(βo)    cos(βo) 1.]
+                    
+#     return T
+
+# end
+
+
+function define_rotation_matrix(A, B, β)
+
+    AB = B - A
+
+    length_AB = norm(AB)
+
+    χ = π/2 - acos(AB[2]/length_AB)
+    ρ = -atan(AB[3]/AB[1])
+    ω = β
+
+    γ = RotXZY(-ω, -χ, -ρ)
+
+    Γ = zeros(Float64, (12, 12))
+
+    Γ[1:3, 1:3] .= γ
+    Γ[4:6, 4:6] .= γ
+    Γ[7:9, 7:9] .= γ
+    Γ[10:12, 10:12] .= γ
+
+    return Γ
+
+end
+
+
+
+function define_rotation_matrix(A, B)
+
+    AB = B - A
+
+    χ = atan(AB[2], AB[1])
+
+    γ = Angle2d(-χ)  #need negative sign here since z-axis is pointing in opposite direction in Rotations.jl
+
+    Γ = zeros(Float64, (6, 6))
+
+    Γ[1:2, 1:2] .= γ
+    Γ[3, 3] = 1.0
+    Γ[4:5, 4:5] .= γ
+    Γ[6, 6] = 1.0
+
+    return Γ
+
+end
+
+
+
+# function second_order_analysis_residual!(R, U, K, F)
+
+#     for i=1:length(F)
  
-    return R
+#        R[i] = transpose(K[i,:]) * U - F[i]
  
- end
+#     end
+ 
+#     return R
+ 
+#  end
 
  function beam_shape_function(q1,q2,q3,q4,L,x, offset)
 
@@ -116,35 +309,35 @@ function second_order_analysis_residual!(R, U, K, F)
 end
 
 
-function define_local_element_mass_matrix(A, L, ρ)
+# function define_local_element_mass_matrix(A, L, ρ)
 
-    m=zeros(Float64, (6,6))
+#     m=zeros(Float64, (6,6))
 
-    m[1,1] = 140
-    m[1,4] = 70
-    m[2,2] = 156
-    m[2,3] = 22L
-    m[2,5] = 54
-    m[2,6] = -13L
-    m[3,3] = 4L^2
-    m[3,5] = 13L
-    m[3,6] = -3L^2
-    m[4,4] = 140
-    m[5,5] = 156
-    m[5,6] = -22L
-    m[6,6] = 4L^2
+#     m[1,1] = 140
+#     m[1,4] = 70
+#     m[2,2] = 156
+#     m[2,3] = 22L
+#     m[2,5] = 54
+#     m[2,6] = -13L
+#     m[3,3] = 4L^2
+#     m[3,5] = 13L
+#     m[3,6] = -3L^2
+#     m[4,4] = 140
+#     m[5,5] = 156
+#     m[5,6] = -22L
+#     m[6,6] = 4L^2
 
-    m[2:6,1] = m[1,2:6]
-    m[3:6,2] = m[2,3:6]
-    m[4:6,3] = m[3,4:6]
-    m[5:6,4] = m[4,5:6]
-    m[6,5] = m[5,6]
+#     m[2:6,1] = m[1,2:6]
+#     m[3:6,2] = m[2,3:6]
+#     m[4:6,3] = m[3,4:6]
+#     m[5:6,4] = m[4,5:6]
+#     m[6,5] = m[5,6]
 
-    m =(ρ*A*L/420) * m
+#     m =(ρ*A*L/420) * m
 
-    return m
+#     return m
 
-end
+# end
 
 
 
@@ -176,53 +369,138 @@ function get_load_deformation_response(I, A, E, L, P, F, free_dof)
 
 end
 
-# function define_local_transformation(δΔy, Lo)
+function define_global_elastic_stiffness_matrix(nodes, cross_sections, materials, members)
 
-#     T_to_local = [ -1.  δΔy/Lo  0.  1.  -δΔy/Lo.    0.
-#                     0.  1/Lo    1.  0.  -1/Lo       0.
-#                     0.  1/Lo    1.  0.  1/Lo        1.]
+    num_dof_per_node = 3
+    num_nodes = length(nodes)
+    Ke = zeros(Float64, (num_dof_per_node * num_nodes, num_dof_per_node * num_nodes))
+    
+    num_elements = length(members.type)
+    
+    for i=1:num_elements
+    
+        node_i = members.start_node[i]
+        node_j = members.end_node[i]
+    
+        cross_section_label = members.cross_section[i]
+        index = findfirst(name->name == cross_section_label, cross_sections.name)
+    
+        I = cross_sections.Ixx[index]
+        A = cross_sections.A[index]
+    
+        material_label = members.material[i]
+        index = findfirst(name->name == material_label, materials.name)
+    
+        E = materials.E[index]
+        ν = materials.ν[index]
+    
+        L = norm(nodes[node_j] - nodes[node_i])
+    
+        ke_local = InstantFrame.define_local_elastic_element_stiffness_matrix(I, A, E, L)
+    
+        A = nodes[node_i]
+        B = nodes[node_j]
+        Γ = InstantFrame.define_rotation_matrix(A, B)
+    
+        ke_global = Γ' * ke_local * Γ
+    
+        node_i_dof = range(1, num_dof_per_node) .+ (node_i - 1) * num_dof_per_node
+        node_j_dof = range(1, num_dof_per_node) .+ (node_j - 1) * num_dof_per_node
+    
+        global_dof = [node_i_dof; node_j_dof]
+    
+        Ke[global_dof, global_dof] = Ke[global_dof, global_dof] .+ ke_global
+    
+    end
+
+    return Ke
+
+end
 
 
-#     return T_to_local
+function calculate_internal_forces(nodes, cross_sections, materials, members, u)
 
-# end
+    num_dof_per_node = 3
+    num_elements = length(members.type)
+    P = Array{Array{Float64}}(undef, num_elements)
+    
+    for i=1:num_elements
+    
+        node_i = members.start_node[i]
+        node_j = members.end_node[i]
+    
+        cross_section_label = members.cross_section[i]
+        index = findfirst(name->name == cross_section_label, cross_sections.name)
+    
+        I = cross_sections.Ixx[index]
+        A = cross_sections.A[index]
+    
+        material_label = members.material[i]
+        index = findfirst(name->name == material_label, materials.name)
+    
+        E = materials.E[index]
+        ν = materials.ν[index]
+    
+        L = norm(nodes[node_j] - nodes[node_i])
+    
+        ke_local = InstantFrame.define_local_elastic_element_stiffness_matrix(I, A, E, L)
 
-# function define_geometric_stiffness_matrix(P, Lo)
+        A = nodes[node_i]
+        B = nodes[node_j]
+        Γ = InstantFrame.define_rotation_matrix(A, B)
 
-#     Kg = zeros(Float64, (6, 6))
+        node_i_dof = range(1, num_dof_per_node) .+ (node_i - 1) * num_dof_per_node
+        node_j_dof = range(1, num_dof_per_node) .+ (node_j - 1) * num_dof_per_node
 
-#     Kg[2, 2] = P/Lo
-#     Kg[2, 4] = -P/Lo
-#     Kg[5, 2] = -P/Lo
-#     Kg[5, 4] =  P/Lo
+        global_dof = [node_i_dof; node_j_dof]
 
-#     return Kg
+        ue_local = Γ * u[global_dof]
+    
+        P[i] = ke_local * ue_local
+    
+    end
 
-# end
+    return P
+    
+end
+    
 
+    function define_global_geometric_stiffness_matrix(nodes, members, P)
 
-#calculate element orientations
+        num_dof_per_node = 3
+        num_nodes = length(nodes)
+        Kg = zeros(Float64, (num_dof_per_node * num_nodes, num_dof_per_node * num_nodes))
+        
+        num_elements = length(members.type)
+        
+        for i=1:num_elements
+        
+            node_i = members.start_node[i]
+            node_j = members.end_node[i]
+            
+            L = norm(nodes[node_j] - nodes[node_i])
+        
+            element_axial_force = P[i][4]  #this needs to change for 3D!!! 
+            kg_local = define_local_geometric_stiffness_matrix(element_axial_force, L)
+        
+            A = nodes[node_i]
+            B = nodes[node_j]
+            Γ = InstantFrame.define_rotation_matrix(A, B)
+        
+            kg_global = Γ' * kg_local * Γ
+        
+            node_i_dof = range(1, num_dof_per_node) .+ (node_i - 1) * num_dof_per_node
+            node_j_dof = range(1, num_dof_per_node) .+ (node_j - 1) * num_dof_per_node
+        
+            global_dof = [node_i_dof; node_j_dof]
+        
+            Kg[global_dof, global_dof] = Kg[global_dof, global_dof] .+ kg_global
+        
+        end
+    
+        return Kg
+    
+    end
 
-#define element elastic stiffness matrices
-
-#define element geometric stiffness matrices
-
-#define element mass matrices
-
-#apply member end conditions
-
-#calculate element global stiffness matrices
-
-#assemble Ke and Kg
-
-#assemble M
-
-#apply boundary conditions
-
-#solve for displacement field
-
-#solve for internal forces
-
-#solve for vibration modes
 
 end # module

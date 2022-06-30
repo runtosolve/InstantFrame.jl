@@ -1,4 +1,4 @@
-using InstantFrame, NLsolve, Plots, LinearAlgebra, BenchmarkTools
+using InstantFrame, NonlinearSolve, Plots, LinearAlgebra, BenchmarkTools, StaticArrays, SparseArrays
 
 #Denavit, M. D., & Hajjar, J. F. (2013). Description of geometric nonlinearity for beam-column analysis in OpenSees.
 
@@ -34,8 +34,33 @@ Kff = Ke_ff + Kg_ff
 #Define the deformation initial guess for the nonlinear solver.
 deformation_guess = Ke_ff \ Ff
 
+
+p = [Kff, Ff]
+
+function residual(u, p)
+
+    Kff, Ff = p
+
+    Kff * u - Ff
+
+end
+
+
+
+u0 = deformation_guess
+u0 = @SVector [u0[i] for i in eachindex(u0)]
+probN = NonlinearProblem{false}(residual, u0, p)
+@btime solver = solve(probN, NewtonRaphson(), tol = 1e-9)
+
+
+
+
+
+
+
+
 #Solve for the beam deformations.
-@btime solution = nlsolve((R,U) ->InstantFrame.second_order_analysis_residual!(R, U, Kff, Ff), deformation_guess, method=:newton)
+@btime solution = nlsolve((R,U) ->InstantFrame.second_order_analysis_residual!(R, U, Kff, Ff), deformation_guess)
 
 #Newton-Raphson is faster here, than trust region...
 
