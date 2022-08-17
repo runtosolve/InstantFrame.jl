@@ -1,10 +1,8 @@
-module InstantFrame
-
 using SparseArrays, StaticArrays, LinearAlgebra, Rotations, Parameters, NonlinearSolve
 
-export UI
-include("UI.jl")
-using .UI
+# export UI
+# include("UI.jl")
+# using .UI
 
 
 @with_kw struct Node
@@ -84,9 +82,9 @@ end
 @with_kw struct Solution
 
     u1::Array{Float64}
-    P1::Array{Array{Float64, 1}}
+    P1::Array{Float64}
     u2::Array{Float64}
-    P2::Array{Array{Float64, 1}}
+    P2::Array{Float64}
 
 end
 
@@ -261,19 +259,16 @@ function define_element_properties(node, cross_section, material, element)
     
         #element length
         L[i] = norm(node_j - node_i)
-
-        #rotation matrix
-        Γ[i] = define_rotation_matrix(node_i, node_j, element.β[i])
-
+    
         #global dof for each element
-        num_dof_per_node = 6 #hard code this for now
+        num_dof_per_node = Int(size(ke_local[i], 1)/2)
         node_i_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (node_i_index-1)
         node_j_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (node_j_index-1) 
         global_dof[i] = [node_i_dof; node_j_dof]
 
     end
 
-    properties = Properties(L, A, Iz, Iy, J, E, ν, Γ, global_dof)
+    properties = FrameProperties(L, A, Iz, Iy, J, E, ν, Γ, global_dof)
 
     return properties
 
@@ -294,14 +289,14 @@ function assemble_stiffness_matrix(k, dof)
 
 end
 
-function calculate_element_internal_forces(properties, ke_local, u)
+function calculate_element_internal_forces(properties, u)
 
     P_element_local = Array{Array{Float64, 1}}(undef, length(properties.L))
 
     for i in eachindex(properties.L)
         u_element_global = u[properties.global_dof[i]]
         u_element_local = properties.Γ[i] * u_element_global
-        P_element_local[i] = ke_local[i] * u_element_local
+        P_element_local[i] = properties.ke_local[i] * u_element_local
     end
 
     return P_element_local
@@ -317,11 +312,8 @@ end
 function nonlinear_solution(Kff, Ff, u1f)
 
     p = [Kff, Ff]
-
-    u1f = SVector{length(u1f)}(u1f)
-    # u1f_S = zeros(Float64, length(u1f))
-    # u1fSS = [u1f_S[i] for i in eachindex(u1f)]
-    probN = NonlinearSolve.NonlinearProblem{false}(residual, u1f, p)
+    u1f = @SVector [u1f[i] for i in eachindex(u1f)]
+    probN = NonlinearSolve.NonlinearProblem{false}(residual, u1fs, p)
     u2f = NonlinearSolve.solve(probN, NewtonRaphson(), tol = 1e-9)
 
     return u2f
@@ -335,7 +327,7 @@ function solve(node, cross_section, material, element, supports, loads)
 
     free_dof = vec(findall(dof->dof==0, supports))
 
-    ke_local = [InstantFrame.define_local_elastic_stiffness_matrix(properties.Iy[i], properties.Iz[i], properties.A[i], properties.J[i], properties.E[i], properties.ν[i], properties.L[i]) for i in eachindex(properties.L)]
+    ke_local = [InstantFrame.InstantFrame.define_local_elastic_stiffness_matrix(properties.Iy[i], properties.Iz[i], properties.A[i], properties.J[i], properties.E[i], properties.ν[i], properties.L[i]) for i in eachindex(properties.L)]
     ke_global = [properties.Γ[i]'*ke_local[i]*properties.Γ[i] for i in eachindex(properties.L)]
 
     Ke = InstantFrame.assemble_stiffness_matrix(ke_global, properties.global_dof)
@@ -347,8 +339,8 @@ function solve(node, cross_section, material, element, supports, loads)
     u1 = zeros(Float64, size(Ke,1))
     u1[free_dof] = u1f
 
-    P1 = InstantFrame.calculate_element_internal_forces(properties, ke_local, u1)
-    P1_axial = [P1[i][7] for i in eachindex(P1)]
+    P1 = InstantFrame.calculate_element_internal_forces(properties, u1)
+    P1_axial = [P_local_1[i][7] for i in eachindex(P1)]
     kg_local = [InstantFrame.define_local_geometric_stiffness_matrix(P1_axial[i], properties.L[i]) for i in eachindex(properties.L)]
     kg_global = [properties.Γ[i]'*kg_local[i]*properties.Γ[i] for i in eachindex(properties.L)]
     Kg = InstantFrame.assemble_stiffness_matrix(kg_global, properties.global_dof)
@@ -358,147 +350,16 @@ function solve(node, cross_section, material, element, supports, loads)
 
     # u2f = nonlinear_solution(Kff, Ff, u1f)
 
-    p = [Kff, Ff]
-    u1f = SVector{length(u1f)}(u1f)
-    probN = NonlinearSolve.NonlinearProblem{false}(residual, u1f, p)
-    u2f = NonlinearSolve.solve(probN, NewtonRaphson(), tol = 1e-9)
+    # u2 = zeros(Float64, size(Ke,1))
+    # u2[free_dof] = u2f
+    # P2 = InstantFrame.calculate_element_internal_forces(properties, u2)
 
-    u2 = zeros(Float64, size(Ke,1))
-    u2[free_dof] = u2f
-    P2 = InstantFrame.calculate_element_internal_forces(properties, ke_local, u2)
+    # equations = Equations(free_dof, ke_local, ke_global, Ke, kg_local, kg_global, Kg)
 
-    equations = Equations(free_dof, ke_local, ke_global, Ke, kg_local, kg_global, Kg)
+    # solution = Solution(u1, P1, u2, P2)
 
-    solution = Solution(u1, P1, u2, P2)
+    # model = Model(properties, equations, solution)
 
-    model = Model(properties, equations, solution)
-
-    return model
+    return Kff
 
 end
-
-end # module
-
-
-
-
-# function define_local_elastic_element_stiffness_matrix_condensed(I, A, E, L, k1, k2)
-
-    
-    
-#     α1 = k1/(E*I/L)
-
-#     α2 = k2*(E*I/L)
-
-#     Kbb = E*I/L * [4+α1     2
-#                    2        4+α2]
-
-#     Kbc = E*I/L *[6/L   -α1     -6/L    0.0
-#                   6/L   0.0     -6/L    -α2]
-
-#     Kcb = Kbc'
-
-#     Kcc = E*I/L * [12/L^2   0.0     -12/L^2     0.0
-#                    0.0      α1      0.0         0.0
-#                    -12/L^2  0.0     12/L^2      0.0
-#                    0.0      0.0     0.0         α2]
-
-    
-#     ke_condensed = Kcc - Kcb * Kbb^-1 * Kbc
-
-#     ke = zeros(Float64, 6, 6)
-
-#     c = [2;3;5;6]
-
-#     ke[c, c] = ke_condensed
-
-#     ke[1, 1] = E*A/L
-#     ke[1, 4] = -E*A/L
-#     ke[4, 1] = -E*A/L
-#     ke[4, 4] = E*A/L
-
-
-#     return ke
-
-# end
-
-
-#     # α = (α1 * α2) / (α1*α2 + 4*α1 + 4*α2 + 12)
-
-#     # ke = zeros(Float64, 6, 6)
-
-#     # ke[1, 1] = E*A/L
-#     # ke[1, 4] = E*A/L
-#     # ke[2, 2] = α*E*I/L * 12/L^2 * (1 + (α1 + α2)/(α1*α2))
-#     # ke[2, 3] = α*E*I/L * 6/L * (1 + 2/α2)
-#     # ke[2, 5] = α*E*I/L * -12/L^2 * (1 + (α1 + α2)/(α1*α2))
-#     # ke[2, 6] = α*E*I/L * 6/L * (1 + 2/α1)
-#     # ke[3, 3] = α*E*I/L * 4 * (1 + 3/α2)
-#     # ke[3, 5] = α*E*I/L * -6/L * (1 + 2/α2)
-#     # ke[3, 6] = α*E*I/L * 2 
-#     # ke[5, 5] = α*E*I/L * 12/L^2 * (1 + (α1 + α2)/(α1*α2))
-#     # ke[5, 6] = α*E*I/L * -6/L * (1 + 2/α1)
-#     # ke[6, 6] = α*E*I/L * 4 * (1 + 3/α1)
-
-#     # for i = 1:6
-
-#     #     for j = 1:6
-
-#     #         ke[j, i] = ke[i, j]
-
-#     #     end
-        
-#     # end
-
-# #     return ke
-
-# # end
-
-
-# function define_local_3D_mass_matrix(A, L, ρ)
-
-
-#     m = zeros(Float64, (12, 12))
-
-#     m[1, 1] = 140
-#     m[1, 7] = 70
-#     m[2, 2] = 156
-#     m[2, 6] = 22L
-#     m[2, 8] = 54
-#     m[2, 12] = -13L
-#     m[3, 3] = 156
-#     m[3, 5] = -22L
-#     m[3, 9] = 54 
-#     m[3, 11] = 13L
-#     m[4, 4] = 140Io/A
-#     m[4, 10] = 70Io/A
-#     m[5, 5] = 4L^2 
-#     m[5, 9] =  -13L
-#     m[5, 11] = -3L^2
-#     m[6, 6] = 4L^2
-#     m[6, 8] = 13L
-#     m[6, 12] = -3L^2
-#     m[7, 7] = 140
-#     m[8, 8] = 156
-#     m[8, 12] = -22L
-#     m[9, 9] = 156
-#     m[9, 11] = 22L
-#     m[10, 10] = 140Io/A
-#     m[11, 11] = 4L^2
-#     m[12, 12] = 4L^2
-    
-#     for i = 1:12
-
-#         for j = 1:12
-
-#             m[j, i] = m[i, j]
-
-#         end
-        
-#     end
-    
-#     m = m .* (ρ*A*L)/420
-
-#     return m
-
-# end
