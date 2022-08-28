@@ -3,7 +3,7 @@ module UI
 using GLMakie
 
 
-function deformed_shape(node, u, scale)
+function deformed_shape(node, element, u, scale)
 
     #Plot solution.
     X = [node.coordinates[i][1] for i in eachindex(node.list)]
@@ -17,8 +17,13 @@ function deformed_shape(node, u, scale)
     θY = u[5:6:end]
     θZ = u[6:6:end]
 
+    X_range = maximum(X) - minimum(X)
+    Y_range = maximum(Y) - minimum(Y)
+    Z_range = maximum(Z) - minimum(Z)
+
     f = Figure()
     ax = Axis3(f[1,1])
+    ax.aspect = (1.0, Y_range/X_range, Z_range/X_range)
 
     for i in eachindex(element.list)
 
