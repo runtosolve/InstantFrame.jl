@@ -60,17 +60,23 @@ end
 
 @with_kw struct UniformLoad
 
-    elements::Array{Int64}
-    loads::NamedTuple{(:qX, :qY, :qZ, :mX, :mY, :mZ), NTuple{6, Vector{Float64}}}
+    labels::Union{Array{String}, Nothing}
+    elements::Union{Array{Int64}, Nothing}
+    loads::Union{NamedTuple{(:qX, :qY, :qZ, :mX, :mY, :mZ), NTuple{6, Vector{Float64}}}, Nothing}
 
 end
+
+UniformLoad(nothing) = UniformLoad(labels=nothing, elements=nothing, loads=nothing)
 
 @with_kw struct PointLoad
 
-    nodes::Array{Int64}
-    loads::NamedTuple{(:FX, :FY, :FZ, :MX, :MY, :MZ), NTuple{6, Vector{Float64}}}
+    labels::Union{Array{String}, Nothing}
+    nodes::Union{Array{Int64}, Nothing}
+    loads::Union{NamedTuple{(:FX, :FY, :FZ, :MX, :MY, :MZ), NTuple{6, Vector{Float64}}}, Nothing}
 
 end
+
+PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, loads=nothing)
 
 @with_kw struct ElementProperties
 
@@ -423,7 +429,7 @@ function first_order_analysis(node, cross_section, material, connection, element
 
     ke_local = [InstantFrame.define_local_elastic_stiffness_matrix(element_properties.Iy[i], element_properties.Iz[i], element_properties.A[i], element_properties.J[i], element_properties.E[i], element_properties.ν[i], element_properties.L[i]) for i in eachindex(element_properties.L)]
 
-    ke_local = InstantFrame.modify_element_local_connection_stiffness(element_properties, ke_local)
+    ke_local = InstantFrame.modify_element_local_connection_stiffness(element_properties, ke_local, element)
 
     ke_global = [element_properties.Γ[i]'*ke_local[i]*element_properties.Γ[i] for i in eachindex(element_properties.L)]
 
@@ -465,7 +471,7 @@ function second_order_analysis(node, cross_section, material, connection, elemen
 
     ke_local = [InstantFrame.define_local_elastic_stiffness_matrix(element_properties.Iy[i], element_properties.Iz[i], element_properties.A[i], element_properties.J[i], element_properties.E[i], element_properties.ν[i], element_properties.L[i]) for i in eachindex(element_properties.L)]
 
-    ke_local = InstantFrame.modify_element_local_connection_stiffness(element_properties, ke_local)
+    ke_local = InstantFrame.modify_element_local_connection_stiffness(element_properties, ke_local, element)
 
     ke_global = [element_properties.Γ[i]'*ke_local[i]*element_properties.Γ[i] for i in eachindex(element_properties.L)]
 
@@ -524,7 +530,7 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
 
     ke_local = [InstantFrame.define_local_elastic_stiffness_matrix(element_properties.Iy[i], element_properties.Iz[i], element_properties.A[i], element_properties.J[i], element_properties.E[i], element_properties.ν[i], element_properties.L[i]) for i in eachindex(element_properties.L)]
 
-    ke_local = InstantFrame.modify_element_local_connection_stiffness(element_properties, ke_local)
+    ke_local = InstantFrame.modify_element_local_connection_stiffness(element_properties, ke_local, element)
 
     ke_global = [element_properties.Γ[i]'*ke_local[i]*element_properties.Γ[i] for i in eachindex(element_properties.L)]
 
@@ -606,26 +612,30 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
     local_fixed_end_forces = Array{Array{Float64}}(undef, length(uniform_load.elements))
     nodal_forces_uniform_load = zeros(Float64, length(node.numbers) * 6)  #hard coded for now
 
-    for i in eachindex(uniform_load.elements)
+    if !isnothing(uniform_load.elements)
 
-        elem_num = uniform_load.elements[i]
-        elem_index = findfirst(num->num==elem_num, element.numbers)
+        for i in eachindex(uniform_load.elements)
 
-        global_element_uniform_loads = [uniform_load.loads.qX[elem_index], uniform_load.loads.qY[elem_index], uniform_load.loads.qZ[elem_index], uniform_load.loads.mX[elem_index], uniform_load.loads.mY[elem_index], uniform_load.loads.mZ[elem_index]]
+            elem_num = uniform_load.elements[i]
+            elem_index = findfirst(num->num==elem_num, element.numbers)
 
-        local_element_uniform_loads = element_properties.Γ[elem_index][1:6, 1:6] * global_element_uniform_loads
+            global_element_uniform_loads = [uniform_load.loads.qX[elem_index], uniform_load.loads.qY[elem_index], uniform_load.loads.qZ[elem_index], uniform_load.loads.mX[elem_index], uniform_load.loads.mY[elem_index], uniform_load.loads.mZ[elem_index]]
 
-        wx_local = local_element_uniform_loads[1]
-        wy_local = local_element_uniform_loads[2]
-        wz_local = local_element_uniform_loads[3]
+            local_element_uniform_loads = element_properties.Γ[elem_index][1:6, 1:6] * global_element_uniform_loads
 
-        local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index])
+            wx_local = local_element_uniform_loads[1]
+            wy_local = local_element_uniform_loads[2]
+            wz_local = local_element_uniform_loads[3]
 
-        global_fixed_end_forces = element_properties.Γ[elem_index]' * local_fixed_end_forces[i]
+            local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index])
 
-        element_global_nodal_forces_uniform_load[i] = -global_fixed_end_forces
+            global_fixed_end_forces = element_properties.Γ[elem_index]' * local_fixed_end_forces[i]
 
-        nodal_forces_uniform_load[element_properties.global_dof[elem_index]] += element_global_nodal_forces_uniform_load[i]
+            element_global_nodal_forces_uniform_load[i] = -global_fixed_end_forces
+
+            nodal_forces_uniform_load[element_properties.global_dof[elem_index]] += element_global_nodal_forces_uniform_load[i]
+
+        end
 
     end
 
@@ -633,7 +643,7 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
 
 end
 
-function modify_element_local_connection_stiffness(element_properties, ke_local)
+function modify_element_local_connection_stiffness(element_properties, ke_local, element)
 
     for i in eachindex(ke_local)
 
@@ -642,10 +652,10 @@ function modify_element_local_connection_stiffness(element_properties, ke_local)
     
         if (!isempty(start_index)) | (!isempty(end_index))
     
-                index = findfirst(elem_num->elem_num==element.numbers, element.numbers[i])
+                index = findfirst(elem_num->elem_num==element.numbers[i], element.numbers)
     
-                ke_local_xy = InstantFrame.define_local_elastic_element_stiffness_matrix_partially_restrained(properties.Iz[index], properties.E[index], properties.L[index], element_properties.start_connection[index][6], element_properties.end_connection[index][6])
-                ke_local_xz = InstantFrame.define_local_elastic_element_stiffness_matrix_partially_restrained(properties.Iy[index], properties.E[index], properties.L[index], element_properties.start_connection[index][5], element_properties.end_connection[index][5])
+                ke_local_xy = InstantFrame.define_local_elastic_element_stiffness_matrix_partially_restrained(element_properties.Iz[index], element_properties.E[index], element_properties.L[index], element_properties.start_connection[index][6], element_properties.end_connection[index][6])
+                ke_local_xz = InstantFrame.define_local_elastic_element_stiffness_matrix_partially_restrained(element_properties.Iy[index], element_properties.E[index], element_properties.L[index], element_properties.start_connection[index][5], element_properties.end_connection[index][5])
     
                 dof = [2, 6, 8, 12]
                 ke_local[index][dof, dof] .= ke_local_xy
@@ -766,17 +776,22 @@ end
 
 function define_global_dof_point_loads(node, point_load)
 
+
     num_dof_per_node = 6
     global_dof_point_loads = zeros(Float64, length(node.numbers)*num_dof_per_node)
 
-    nodal_point_loads = reduce(hcat, collect(point_load.loads))
+    if !isnothing(point_load.nodes)
 
-    for i in eachindex(point_load.nodes)
+        nodal_point_loads = reduce(hcat, collect(point_load.loads))
 
-        node_index = findfirst(node_num->node_num == point_load.nodes[i], node.numbers)
-        node_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (node_index-1)
+        for i in eachindex(point_load.nodes)
 
-        global_dof_point_loads[node_dof] = nodal_point_loads[i, :]
+            node_index = findfirst(node_num->node_num == point_load.nodes[i], node.numbers)
+            node_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (node_index-1)
+
+            global_dof_point_loads[node_dof] = nodal_point_loads[i, :]
+
+        end
 
     end
 
