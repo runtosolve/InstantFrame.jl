@@ -800,6 +800,21 @@ function define_global_dof_point_loads(node, point_load)
 end
 
 
+function define_global_element_displacements(u, global_dof)
+
+    u_global_e = [zeros(Float64, 12) for i in eachindex(global_dof)]
+
+    for i in eachindex(global_dof)
+
+        u_global_e[i] = u[global_dof[i]]
+        
+    end
+
+    return u_global_e
+
+end
+
+
 end # module
 
 
