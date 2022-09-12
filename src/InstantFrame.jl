@@ -98,6 +98,12 @@ PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, loads=nothing)
 
 end
 
+@with_kw struct ElementConnections
+    elements::Array{Int64, 1}
+    end_displacements::Array{Array{Float64, 1}}
+end
+
+
 @with_kw struct FirstOrderEquations
   
     free_dof::Array{Int64}
@@ -135,10 +141,14 @@ end
 
 @with_kw struct FirstOrderSolution
 
-    u1::Array{Float64}
-    P1::Array{Array{Float64, 1}}
+    # u::Array{Float64}
+    # P::Array{Array{Float64, 1}}
+    nodal_displacements::Array{Array{Float64, 1}}
+    element_forces::Array{Array{Float64, 1}}
+    element_connections::ElementConnections
 
 end
+
 
 @with_kw struct SecondOrderSolution
 
@@ -180,6 +190,7 @@ end
 end
 
 
+
 function define_local_elastic_stiffness_matrix(Iy, Iz, A, J, E, ν, L)
 
 
@@ -188,9 +199,9 @@ function define_local_elastic_stiffness_matrix(Iy, Iz, A, J, E, ν, L)
     ke = zeros(Float64, (12, 12))
 
     ke[1, 1] = E*A/L
-    ke[1, 6] = -E*A/L
+    ke[1, 7] = -E*A/L
     ke[2, 2] = 12*E*Iz/L^3
-    ke[2, 6] = 6*E*Iz/L^3
+    ke[2, 6] = 6*E*Iz/L^2
     ke[2, 8] = -12*E*Iz/L^3
     ke[2, 12] = 6*E*Iz/L^2
     ke[3, 3] = 12*E*Iy/L^3
@@ -420,12 +431,27 @@ function nonlinear_solution(Kff, Ff, u1f)
 
 end
 
+function define_nodal_displacements(node, u)
+
+    nodal_displacements = Array{Array{Float64, 1}}(undef, length(node.numbers))
+
+    num_dof_per_node = 6 #hard code this for now
+    for i in eachindex(node.numbers)
+
+        nodal_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (i-1)
+        nodal_displacements[i] = u[nodal_dof]
+
+    end
+
+    return nodal_displacements
+
+end
+
+
 
 function first_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load)
 
     element_properties = InstantFrame.define_element_properties(node, cross_section, material, element, connection)
-
-    free_global_dof = InstantFrame.define_free_global_dof(node, support)
 
     ke_local = [InstantFrame.define_local_elastic_stiffness_matrix(element_properties.Iy[i], element_properties.Iz[i], element_properties.A[i], element_properties.J[i], element_properties.E[i], element_properties.ν[i], element_properties.L[i]) for i in eachindex(element_properties.L)]
 
@@ -443,18 +469,27 @@ function first_order_analysis(node, cross_section, material, connection, element
 
     forces = InstantFrame.Forces(equiv_global_nodal_forces_uniform_load, local_fixed_end_forces, global_dof_nodal_forces_uniform_load, global_dof_point_loads, F)
 
+    free_global_dof = InstantFrame.define_free_global_dof(node, support)
+
     Ff = F[free_global_dof]
     Ke_ff = Ke[free_global_dof, free_global_dof]
-    u1f = Ke_ff \ Ff
+    uf = Ke_ff \ Ff
 
-    u1 = zeros(Float64, size(Ke,1))
-    u1[free_global_dof] = u1f
+    u = zeros(Float64, size(Ke,1))
+    u[free_global_dof] = uf
 
-    P1 = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u1)
+    nodal_displacements = define_nodal_displacements(node, u)
+
+    #calculate element internal forces
+    element_forces = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u)
+
+    #calculate connection deformations
+    element_connections = calculate_element_connection_deformations(element_properties, element, node, nodal_displacements, element_forces)
+
 
     equations = FirstOrderEquations(free_global_dof, ke_local, ke_global, Ke)
 
-    solution = FirstOrderSolution(u1, P1)
+    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections)
 
     model = Model(element_properties, forces, equations, solution)
 
@@ -672,29 +707,89 @@ function modify_element_local_connection_stiffness(element_properties, ke_local,
 end
 
 
+function connection_zeros_and_inf(k1, k2, E, I)
+
+    if k1 == Inf  #need big number instead of Inf because 0.0*Inf = NaN
+        k1 = E*I*10.0^20
+    elseif k1 == 0.0
+        k1 = E*I*10.0^-20
+    end
+
+    if k2 == Inf #need big number instead of Inf
+        k2 = E*I*10.0^20
+    elseif k2 == 0.0
+        k2 = E*I*10.0^-20
+    end
+
+    return k1, k2
+
+end
+
+
 function define_local_elastic_element_stiffness_matrix_partially_restrained(I, E, L, k1, k2)
 
     #from McGuire et al. (2000) Example 13.6
+
+    # if k1 == Inf  #need big number instead of Inf because 0.0*Inf = NaN
+    #     k1 = E*I*10.0^10
+    # elseif k1 == 0.0
+    #     k1 = E*I*10.0^-20
+    # end
+
+    # if k2 == Inf #need big number instead of Inf
+    #     k2 = E*I*10.0^10
+    # elseif k2 == 0.0
+    #     k2 = E*I*10.0^-10
+    # end
+
+    k1, k2 = connection_zeros_and_inf(k1, k2, E, I)
     
     α1 = k1/(E*I/L)  #start node
 
     α2 = k2*(E*I/L)  #end node
 
-    Kbb = E*I/L * [4+α1     2
-                   2        4+α2]
+    # Kbb = E*I/L * [4+α1     2
+    #                2        4+α2]
 
-    Kbc = E*I/L *[6/L   -α1     -6/L    0.0
-                  6/L   0.0     -6/L    -α2]
+    # Kbc = E*I/L *[6/L   -α1     -6/L    0.0
+    #               6/L   0.0     -6/L    -α2]
 
-    Kcb = Kbc'
+    # Kcb = Kbc'
 
-    Kcc = E*I/L * [12/L^2   0.0     -12/L^2     0.0
-                   0.0      α1      0.0         0.0
-                   -12/L^2  0.0     12/L^2      0.0
-                   0.0      0.0     0.0         α2]
+    # Kcc = E*I/L * [12/L^2   0.0     -12/L^2     0.0
+    #                0.0      α1      0.0         0.0
+    #                -12/L^2  0.0     12/L^2      0.0
+    #                0.0      0.0     0.0         α2]
 
     
-    ke = Kcc - Kcb * Kbb^-1 * Kbc
+    # ke = Kcc - Kcb * Kbb^-1 * Kbc
+
+    α = (α1*α2)/(α1*α2 + 4*α1 + 4*α2 + 12)
+
+    ke = zeros(Float64, 4, 4)
+
+    ke[1,1] = 12/L^2*(1 + (α1+α2)/(α1*α2))
+    ke[1,2] = 6/L * (1+2/α2)
+    ke[1,3] = -12/L^2*(1+(α1+α2)/(α1*α2))
+    ke[1,4] = 6/L*(1+2/α1)
+    ke[2,2] = 4*(1+3/α2)
+    ke[2,3] = 6/L*(1+2/α2)
+    ke[2,4] = 2
+    ke[3,3] = 12/L^2*(1+(α1+α2)/(α1*α2))
+    ke[3,4] = -6/L*(1+2/α1)
+    ke[4,4] = 4*(1+3/α1)
+
+    for i = 1:4
+
+        for j = 1:4
+
+            ke[j, i] = ke[i, j]
+
+        end
+        
+    end
+
+    ke = α * (E * I / L) .* ke
 
     return ke
 
@@ -800,17 +895,103 @@ function define_global_dof_point_loads(node, point_load)
 end
 
 
-function define_global_element_displacements(u, global_dof)
 
-    u_global_e = [zeros(Float64, 12) for i in eachindex(global_dof)]
+function calculate_element_connection_deformations(properties, element, node, nodal_displacements, element_forces)
 
-    for i in eachindex(global_dof)
+    u_element_connection = Array{Array{Float64, 1}}(undef, 0)
+    elements_with_connections = Array{Int64}(undef, 0)
 
-        u_global_e[i] = u[global_dof[i]]
-        
+    #go through each element with a connection
+    for i in eachindex(properties.L)
+
+        start_index = findall(u->u!=Inf, properties.start_connection[i])
+        end_index = findall(u->u!=Inf, properties.end_connection[i])
+
+        if (!isempty(start_index)) | (!isempty(end_index))
+
+                u_connection_local = zeros(Float64, 12)
+
+                index = findfirst(elem_num->elem_num==element.numbers[i], element.numbers)
+
+                push!(elements_with_connections, element.numbers[i])
+
+                E = properties.E[index]
+                I = properties.Iz[index]
+                L = properties.L[index]
+
+                node_i_num = element.nodes[index][1]
+                node_j_num = element.nodes[index][2]
+
+                node_i_index = findfirst(num->num==node_i_num, node.numbers)
+                node_j_index = findfirst(num->num==node_j_num, node.numbers)
+
+                u_global_element = [nodal_displacements[node_i_index]; nodal_displacements[node_j_index]]
+                u_local_element = properties.Γ[index] * u_global_element
+
+                #x-y plane
+                k1 = properties.start_connection[index][6]
+                k2 = properties.end_connection[index][6]
+                k1, k2 = connection_zeros_and_inf(k1, k2, E, I)
+                v1 = u_local_element[2]
+                θ1 = u_local_element[6]
+                v2 = u_local_element[8]
+                θ2 = u_local_element[12]
+                Mi = element_forces[index][6]
+                Mj = element_forces[index][12]
+                θij = calculate_connection_rotation(k1, k2, E, I, L, v1, θ1, v2, θ2, Mi, Mj)  
+                u_connection_local[6] = θij[1]
+                u_connection_local[12] = θij[2]
+
+                #x-z plane
+                k1 = properties.start_connection[index][5]
+                k2 = properties.end_connection[index][5]
+                k1, k2 = connection_zeros_and_inf(k1, k2, E, I)
+                v1 = u_local_element[3]
+                θ1 = u_local_element[5]
+                v2 = u_local_element[9]
+                θ2 = u_local_element[11]
+                Mi = element_forces[index][5]
+                Mj = element_forces[index][11]
+                θij = calculate_connection_rotation(k1, k2, E, I, L, v1, θ1, v2, θ2, Mi, Mj)  
+                u_connection_local[5] = θij[1]
+                u_connection_local[11] = θij[2]
+
+                u_connection_global = properties.Γ[index]' * u_connection_local  #convert from local to global
+
+                push!(u_element_connection, u_connection_global)
+
+        end
+
     end
 
-    return u_global_e
+
+
+    element_connections = ElementConnections(elements_with_connections, u_element_connection)
+
+    return element_connections
+
+end
+
+function calculate_connection_rotation(k1, k2, E, I, L, v1, θ1, v2, θ2, Mi, Mj)
+
+    #Use MZG Example 13.7 equations to solve for rotation at a partially rigid or hinged connection.
+
+    α1 = k1/(E*I/L)
+    α2 = k2/(E*I/L)
+
+    kB = (E*I/L)*[4+α1  2
+                2   4+α2]
+
+    kC = (E*I/L)*[6/L  -α1 -6/L  0
+                  6/L  0    -6/L -α2]
+
+    u = [v1, θ1, v2, θ2]
+
+    M = [Mi, Mj]
+
+    θ = kB^-1*(M - kC*u)
+
+    return θ
 
 end
 

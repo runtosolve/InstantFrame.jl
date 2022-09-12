@@ -54,6 +54,14 @@ function beam_shape_function(q1, q2, q3, q4, L, x)
 end
 
 
+function column_shape_function(a1, a2, L, x)
+
+    a_x = a1 + (a2-a1)/L * x
+
+    return a_x
+
+end
+
 function get_element_deformed_shape(u_local_e, L, Γ, n)
 
     x = range(0.0, L, n)
@@ -68,18 +76,24 @@ function get_element_deformed_shape(u_local_e, L, Γ, n)
     q1, q2, q3, q4 = u_local_e[dof]
     w_xz = beam_shape_function.(q1, q2, q3, q4, L, x)
 
+    #axial deformation along local x-axis
+    dof = [1, 7]
+    a1, a2 = u_local_e[dof]
+    a_x = column_shape_function.(a1, a2, L, x)
+
     #local element deformation
     δ = [zeros(Float64, 6) for i in eachindex(x)]
 
     for i in eachindex(x)
 
+        δ[i][1] = a_x[i]
         δ[i][2] = w_xy[i]
         δ[i][3] = w_xz[i]
 
     end
 
     #global element deformation
-    Δ = [Γ[1:6,1:6] * δ[i] for i in eachindex(x)]
+    Δ = [Γ'[1:6,1:6] * δ[i] for i in eachindex(x)]
 
     return δ, Δ, x
 
@@ -93,7 +107,7 @@ function discretized_element_global_coords(node_i_coords, Γ, x)
 
     [local_element_discretized_coords[i][1] = x[i] for i in eachindex(x)]
 
-    global_element_discretized_coords = [Γ'[1:3, 1:3] * (local_element_discretized_coords[i] .+  node_i_coords) for i in eachindex(x)]
+    global_element_discretized_coords = [Γ'[1:3, 1:3] * (local_element_discretized_coords[i]) .+  node_i_coords for i in eachindex(x)]
 
     return global_element_discretized_coords
 
@@ -155,11 +169,43 @@ function display_element_deformed_shape(element_XYZ, Δ, scale, ax)
 
 end
 
-function display_model_deformed_shape(u, element, node, properties, scale)
+
+function define_global_element_displacements(u, global_dof, element, element_connections)
+
+    u_global_e = [zeros(Float64, 12) for i in eachindex(global_dof)]
+
+    for i in eachindex(global_dof)
+
+        u_global_e[i] = u[global_dof[i]]
+
+        #update element deformations to consider partially restrained connections
+        index = findfirst(num->num==element.numbers[i], element_connections.elements)
+
+        if !isnothing(index)
+
+            u_global_e[i][[5, 6, 11, 12]] .= element_connections.end_displacements[index][[5, 6, 11, 12]]
+
+        end
+        
+    end
+
+    return u_global_e
+
+end
+
+function display_model_deformed_shape(nodal_displacements, element_connections, element, node, properties, scale)
 
     n = vec(ones(Int64, size(properties.L, 1)) * 11)
 
-    u_global_e = InstantFrame.define_global_element_displacements(u, properties.global_dof)
+    u = Array{Float64}(undef, 0)
+
+    for i in eachindex(nodal_displacements)
+
+        u = [u; nodal_displacements[i]]
+
+    end
+
+    u_global_e = define_global_element_displacements(u, properties.global_dof, element, element_connections)
 
     u_local_e = [properties.Γ[i]*u_global_e[i] for i in eachindex(u_global_e)]
 

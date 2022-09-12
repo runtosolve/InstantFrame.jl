@@ -19,28 +19,28 @@ ke = InstantFrame.define_local_elastic_element_stiffness_matrix_condensed(I, A, 
 
 #From Zeimian Example 13.7
 
-α1 = k1/(E*I/L)
-α2 = k2/(E*I/L)
+    α1 = k1/(E*I/L)
+    α2 = k2/(E*I/L)
 
-Kbb = E*I/L*[4+α1   2
-             2      4+α2]
+    Kbb = E*I/L*[4+α1   2
+                2      4+α2]
 
-Kbc = E*I/L * [6/L  -α1     -6/L    0
-               6/L  0       -6/L    -α2]
-
-
-Kcc = E*I/L*[12/L^2     0   -12/L^2     0
-             0          α1  0       0
-             -12/L^2    0   12/L^2  0
-             0          0   0       α2]
+    Kbc = E*I/L * [6/L  -α1     -6/L    0
+                6/L  0       -6/L    -α2]
 
 
-Kcc_bar = Kcc - Kbc'*Kbb^-1*Kbc
+    Kcc = E*I/L*[12/L^2     0   -12/L^2     0
+                0          α1  0       0
+                -12/L^2    0   12/L^2  0
+                0          0   0       α2]
 
 
-#Check against Sennett Eq. 7.37
+    Kcc_bar = Kcc - Kbc'*Kbb^-1*Kbc
 
-3*E*I/L^3  #Kcc_bar[1,1] matches 
+
+    #Check against Sennett Eq. 7.37
+
+    3*E*I/L^3  #Kcc_bar[1,1] matches 
 
 
 
