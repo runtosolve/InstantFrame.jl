@@ -141,8 +141,6 @@ end
 
 @with_kw struct FirstOrderSolution
 
-    # u::Array{Float64}
-    # P::Array{Array{Float64, 1}}
     nodal_displacements::Array{Array{Float64, 1}}
     element_forces::Array{Array{Float64, 1}}
     element_connections::ElementConnections
@@ -152,10 +150,9 @@ end
 
 @with_kw struct SecondOrderSolution
 
-    u1::Array{Float64}
-    P1::Array{Array{Float64, 1}}
-    u2::Array{Float64}
-    P2::Array{Array{Float64, 1}}
+    nodal_displacements::Array{Array{Float64, 1}}
+    element_forces::Array{Array{Float64, 1}}
+    element_connections::ElementConnections
 
 end
 
@@ -543,11 +540,20 @@ function second_order_analysis(node, cross_section, material, connection, elemen
 
     u2 = zeros(Float64, size(Ke,1))
     u2[free_global_dof] = u2f
-    P2 = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u2)
+    # P2 = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u2)
+
+
+    nodal_displacements = define_nodal_displacements(node, u2)
+
+    #calculate element internal forces
+    element_forces = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u2)
+
+    #calculate connection deformations
+    element_connections = calculate_element_connection_deformations(element_properties, element, node, nodal_displacements, element_forces)
 
     equations = SecondOrderEquations(free_global_dof, ke_local, ke_global, Ke, kg_local, kg_global, Kg)
 
-    solution = SecondOrderSolution(u1, P1, u2, P2)
+    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections)
 
     model = Model(element_properties, forces, equations, solution)
 
@@ -773,7 +779,7 @@ function define_local_elastic_element_stiffness_matrix_partially_restrained(I, E
     ke[1,3] = -12/L^2*(1+(α1+α2)/(α1*α2))
     ke[1,4] = 6/L*(1+2/α1)
     ke[2,2] = 4*(1+3/α2)
-    ke[2,3] = 6/L*(1+2/α2)
+    ke[2,3] = -6/L*(1+2/α2)
     ke[2,4] = 2
     ke[3,3] = 12/L^2*(1+(α1+α2)/(α1*α2))
     ke[3,4] = -6/L*(1+2/α1)

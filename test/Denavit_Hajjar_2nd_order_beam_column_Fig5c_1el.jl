@@ -28,11 +28,11 @@ model = InstantFrame.solve(node, cross_section, material, connection, element, s
 ##tests
 
 #deflection
-isapprox(model.solution.u2[8], 0.765, rtol=0.05)
+isapprox(model.solution.nodal_displacements[2][2], 0.765, rtol=0.05)
 
 #cantilever moment 
-isapprox(-model.solution.P2[1][6], 218.3, rtol=0.05)
+isapprox(-model.solution.element_forces[1][6], 218.3, rtol=0.05)
 
-scale = (1.0, 1.0, 1.0)
-figure = InstantFrame.UI.display_model_deformed_shape(model.solution.u1, element, node, model.properties, scale)
+# scale = (1.0, 1.0, 1.0)
+# figure = InstantFrame.UI.display_model_deformed_shape(model.solution.u1, element, node, model.properties, scale)
 
