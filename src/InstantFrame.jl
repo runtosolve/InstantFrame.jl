@@ -660,7 +660,7 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
             elem_num = uniform_load.elements[i]
             elem_index = findfirst(num->num==elem_num, element.numbers)
 
-            global_element_uniform_loads = [uniform_load.loads.qX[elem_index], uniform_load.loads.qY[elem_index], uniform_load.loads.qZ[elem_index], uniform_load.loads.mX[elem_index], uniform_load.loads.mY[elem_index], uniform_load.loads.mZ[elem_index]]
+            global_element_uniform_loads = [uniform_load.loads.qX[i], uniform_load.loads.qY[i], uniform_load.loads.qZ[i], uniform_load.loads.mX[i], uniform_load.loads.mY[i], uniform_load.loads.mZ[i]]
 
             local_element_uniform_loads = element_properties.Γ[elem_index][1:6, 1:6] * global_element_uniform_loads
 

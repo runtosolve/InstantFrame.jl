@@ -3,7 +3,7 @@ using InstantFrame
 #Denavit and Hajjar (2013) Figure 5
 #http://www1.coe.neu.edu/~jfhajjar/home/Denavit%20and%20Hajjar%20-%20Geometric%20Nonlinearity%20in%20OpenSees%20-%20Report%20No.%20NEU-CEE-2013-02%202013.pdf
 
-#First order analysis 
+#Vibration modes 
 
 material = InstantFrame.Material(names=["steel"], E=[29000.0], ν=[0.3], ρ=[492.0 / 32.17 / 12^4 / 1000.0])  ##ρ = kilo-lbs * s^2 / in^4
 
@@ -27,7 +27,7 @@ model = InstantFrame.solve(node, cross_section, material, connection, element, s
 ##tests
 
 #first mode natural frequency for a cantilever
-#https://vlab.amrita.edu/?sub=3&brch=175&sim=1080&cnt=1
+#https://roymech.org/Useful_Tables/Vibrations/Natural_Vibrations.html
 
 A = cross_section.A[1]
 E = material.E[1]
@@ -35,21 +35,15 @@ I_weak = cross_section.Iy[1]
 I_strong = cross_section.Iz[1]
 L = 180.0
 ρ = material.ρ[1]
-m = ρ * A  
-
-
-
+m = ρ * A  #mass per unit length 
 
 ωn_weak = 1.875^2 * sqrt((E*I_weak)/(m*L^4))
+ωn_strong = 1.875^2 * sqrt((E*I_strong)/(m*L^4))
 
-ωn_strong = 1.875^2 * sqrt((E*I_strong)/(m*L^4)) * 2 * π
+
+isapprox(model.solution.ωn[1], ωn_weak, rtol=0.05)
+isapprox(model.solution.ωn[2], ωn_strong, rtol=0.05)
 
 
-isapprox(model.solution.u1[8], 0.609, rtol=0.05)
 
-#cantilever moment 
-isapprox(-model.solution.P1[1][6], 180.0, rtol=0.05)
-
-scale = (1.0, 1.0, 1.0)
-figure = InstantFrame.UI.display_model_deformed_shape(model.solution.u1, element, node, model.properties, scale)
 
