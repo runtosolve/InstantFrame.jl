@@ -627,6 +627,8 @@ end
 
 function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, L)
 
+    local_fixed_end_forces = zeros(Float64, 12)
+
     local_fixed_end_forces[1] = -wx_local*L/2
     local_fixed_end_forces[7] = -wx_local*L/2
 
