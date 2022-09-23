@@ -637,15 +637,15 @@ function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, 
     # local_fixed_end_forces[9] = -wy_local*L/2
     # local_fixed_end_forces[12] = wy_local*L^2/12
 
-    local_fixed_end_forces[2] = wy_local*L/2
-    local_fixed_end_forces[6] = wy_local*L^2/12
-    local_fixed_end_forces[8] = wy_local*L/2
-    local_fixed_end_forces[12] = -wy_local*L^2/12
+    local_fixed_end_forces[2] = -wy_local*L/2
+    local_fixed_end_forces[6] = -wy_local*L^2/12
+    local_fixed_end_forces[8] = -wy_local*L/2
+    local_fixed_end_forces[12] = +wy_local*L^2/12
 
-    local_fixed_end_forces[3] = wz_local*L/2
-    local_fixed_end_forces[5] = -wz_local*L^2/12
-    local_fixed_end_forces[9] = wz_local*L/2
-    local_fixed_end_forces[11] = wz_local*L^2/12
+    local_fixed_end_forces[3] = -wz_local*L/2
+    local_fixed_end_forces[5] = +wz_local*L^2/12
+    local_fixed_end_forces[9] = -wz_local*L/2
+    local_fixed_end_forces[11] = -wz_local*L^2/12
 
     return local_fixed_end_forces
 
