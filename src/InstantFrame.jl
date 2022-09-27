@@ -394,7 +394,7 @@ function assemble_global_matrix(k, dof)
 
 end
 
-function calculate_element_internal_forces(properties, ke_local, u)
+function calculate_element_internal_forces(properties, ke_local, element, uniform_load, local_fixed_end_forces, u)
 
     P_element_local = Array{Array{Float64, 1}}(undef, length(properties.L))
 
@@ -402,6 +402,16 @@ function calculate_element_internal_forces(properties, ke_local, u)
         u_element_global = u[properties.global_dof[i]]
         u_element_local = properties.Γ[i] * u_element_global
         P_element_local[i] = ke_local[i] * u_element_local
+
+        elem_num = element.numbers[i]
+        index = findfirst(num->num==elem_num, uniform_load.elements)
+
+        if !isempty(index)   #add in fixed end forces
+
+            P_element_local[i] += local_fixed_end_forces[index]
+
+        end
+
     end
 
     return P_element_local
@@ -478,7 +488,7 @@ function first_order_analysis(node, cross_section, material, connection, element
     nodal_displacements = define_nodal_displacements(node, u)
 
     #calculate element internal forces
-    element_forces = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u)
+    element_forces = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, element, uniform_load, local_fixed_end_forces, u)
 
     #calculate connection deformations
     element_connections = calculate_element_connection_deformations(element_properties, element, node, nodal_displacements, element_forces)
