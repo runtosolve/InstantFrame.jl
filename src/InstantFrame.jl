@@ -406,7 +406,7 @@ function calculate_element_internal_forces(properties, ke_local, element, unifor
         elem_num = element.numbers[i]
         index = findfirst(num->num==elem_num, uniform_load.elements)
 
-        if !isempty(index)   #add in fixed end forces
+        if !isnothing(index)   #add in fixed end forces
 
             P_element_local[i] += local_fixed_end_forces[index]
 
