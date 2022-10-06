@@ -673,6 +673,9 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
 
     if !isnothing(uniform_load.elements)
 
+        element_global_nodal_forces_uniform_load = Array{Array{Float64}}(undef, length(uniform_load.elements))
+        local_fixed_end_forces = Array{Array{Float64}}(undef, length(uniform_load.elements))
+
         for i in eachindex(uniform_load.elements)
 
             elem_num = uniform_load.elements[i]
