@@ -404,11 +404,16 @@ function calculate_element_internal_forces(properties, ke_local, element, unifor
         P_element_local[i] = ke_local[i] * u_element_local
 
         elem_num = element.numbers[i]
-        index = findfirst(num->num==elem_num, uniform_load.elements)
 
-        if !isnothing(index)   #add in fixed end forces
+        if !isnothing(uniform_load.elements)
 
-            P_element_local[i] += local_fixed_end_forces[index]
+            index = findfirst(num->num==elem_num, uniform_load.elements)
+
+            if !isnothing(index)   #add in fixed end forces
+
+                P_element_local[i] += local_fixed_end_forces[index]
+
+            end
 
         end
 
@@ -664,8 +669,6 @@ end
 
 function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, element_properties)
 
-    element_global_nodal_forces_uniform_load = Array{Array{Float64}}(undef, length(uniform_load.elements))
-    local_fixed_end_forces = Array{Array{Float64}}(undef, length(uniform_load.elements))
     nodal_forces_uniform_load = zeros(Float64, length(node.numbers) * 6)  #hard coded for now
 
     if !isnothing(uniform_load.elements)
@@ -692,6 +695,11 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
             nodal_forces_uniform_load[element_properties.global_dof[elem_index]] += element_global_nodal_forces_uniform_load[i]
 
         end
+
+    else
+
+        element_global_nodal_forces_uniform_load = Array{Array{Float64}}(undef, 0)
+        local_fixed_end_forces = Array{Array{Float64}}(undef, 0)
 
     end
 
