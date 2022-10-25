@@ -1,6 +1,6 @@
 module UI
 
-using GLMakie, InstantFrame
+using GLMakie, InstantFrame, LinearAlgebra
 
 
 function deformed_shape(node, element, u, scale)
@@ -225,6 +225,202 @@ function display_model_deformed_shape(nodal_displacements, element_connections, 
     return figure
 
 end
+
+
+######new stuff
+
+
+
+function define_element_nodal_start_end_coordinates(element, node)
+
+    element_nodal_coords = Vector{NamedTuple{(:start_node, :end_node), Tuple{Tuple{Float64, Float64, Float64}, Tuple{Float64, Float64, Float64}}}}(undef, length(element.numbers))
+
+    for i in eachindex(element.numbers)
+
+        start_node_index = findfirst(num->num==element.nodes[i][1], node.numbers)
+        end_node_index = findfirst(num->num==element.nodes[i][2], node.numbers)
+
+        element_nodal_coords[i] = (start_node=node.coordinates[start_node_index], end_node=node.coordinates[end_node_index])
+
+    end
+
+    return element_nodal_coords
+
+end
+
+
+
+function get_node_XYZ(node)
+
+    X = [node.coordinates[i][1] for i in eachindex(node.coordinates)]
+    Y = [node.coordinates[i][2] for i in eachindex(node.coordinates)]
+    Z = [node.coordinates[i][3] for i in eachindex(node.coordinates)]
+
+    return X, Y, Z
+
+end
+
+function show_elements!(ax, element_nodal_coords, color)
+
+    for i in eachindex(element_nodal_coords)
+        lines!(ax, [element_nodal_coords[i].start_node[1], element_nodal_coords[i].end_node[1]], [element_nodal_coords[i].start_node[2], element_nodal_coords[i].end_node[2]], [element_nodal_coords[i].start_node[3], element_nodal_coords[i].end_node[3]], color = color)
+
+    end
+
+end
+
+function show_nodes!(ax, X, Y, Z, markersize, color)
+
+    scatter!(ax, X, Y, Z, markersize=markersize, color = color)
+
+end
+
+
+function show_point_loads!(ax, point_load, node, arrow_scale, arrow_head_scale, unit_arrow_head_size, arrowcolor, linecolor, linewidth)
+
+    if !isnothing(point_load.nodes)
+
+        for i in eachindex(point_load.nodes)
+
+            index = findfirst(num->num==point_load.nodes[i], node.numbers)
+            tail_location = node.coordinates[index]
+
+            FX = point_load.loads.FX[i] 
+            FY = point_load.loads.FY[i] 
+            FZ = point_load.loads.FZ[i] 
+
+            unit_arrow_vector = [FX, FY, FZ] / norm([FX, FY, FZ])
+        
+            arrow_vector = unit_arrow_vector .* arrow_scale
+
+            arrow_head_size = unit_arrow_head_size * arrow_head_scale
+
+            arrow_size_vector = arrow_head_scale * unit_arrow_vector
+
+            arrows!(ax, [tail_location[1]-arrow_vector[1] - arrow_size_vector[1]], [tail_location[2]-arrow_vector[2] - arrow_size_vector[2]], [tail_location[3]-arrow_vector[3]-arrow_size_vector[3]], [arrow_vector[1]], [arrow_vector[2]], [arrow_vector[3]], arrowsize = arrow_head_size, linewidth=linewidth,
+                arrowcolor = arrowcolor, linecolor = linecolor)
+
+        end
+
+    end
+
+end
+
+
+function show_uniform_loads!(ax, uniform_load, element, node, unit_arrow_head_size, arrow_head_scale, arrow_scale, linewidth, arrowcolor, linecolor)
+
+    for i in eachindex(uniform_load.elements)
+
+        index = findfirst(num->num==uniform_load.elements[i], element.numbers)
+        element_nodes = element.nodes[index]
+
+        qX = uniform_load.loads.qX[i] 
+        qY = uniform_load.loads.qY[i] 
+        qZ = uniform_load.loads.qZ[i] 
+
+        #start node
+
+        index = findfirst(num->num==element_nodes[1], node.numbers)
+        tail_location = node.coordinates[index]
+
+        if qX != 0.0
+            unit_arrow_vector = [qX, 0.0, 0.0] / norm([qX, 0.0, 0.0])
+            arrow_vector = unit_arrow_vector .* arrow_scale
+            define_load_arrow!(ax, unit_arrow_head_size, arrow_head_scale, unit_arrow_vector, arrow_vector, tail_location, linewidth, arrowcolor, linecolor)
+        end
+
+        if qY != 0.0
+            unit_arrow_vector = [0.0, qY, 0.0] / norm([0.0, qY, 0.0])
+            arrow_vector = unit_arrow_vector .* arrow_scale
+            define_load_arrow!(ax, unit_arrow_head_size, arrow_head_scale, unit_arrow_vector, arrow_vector, tail_location, linewidth, arrowcolor, linecolor)
+        end
+
+        if qZ != 0.0
+            unit_arrow_vector = [0.0, 0.0, qZ] / norm([0.0, 0.0, qZ])
+            arrow_vector = unit_arrow_vector .* arrow_scale
+            define_load_arrow!(ax, unit_arrow_head_size, arrow_head_scale, unit_arrow_vector, arrow_vector, tail_location, linewidth, arrowcolor, linecolor)
+        end
+
+
+        #end node 
+
+        index = findfirst(num->num==element_nodes[2], node.numbers)
+        tail_location = node.coordinates[index]
+
+        if qX != 0.0
+            unit_arrow_vector = [qX, 0.0, 0.0] / norm([qX, 0.0, 0.0])
+            arrow_vector = unit_arrow_vector .* arrow_scale
+            define_load_arrow!(ax, unit_arrow_head_size, arrow_head_scale, unit_arrow_vector, arrow_vector, tail_location, linewidth, arrowcolor, linecolor)
+        end
+
+        if qY != 0.0
+            unit_arrow_vector = [0.0, qY, 0.0] / norm([0.0, qY, 0.0])
+            arrow_vector = unit_arrow_vector .* arrow_scale
+            define_load_arrow!(ax, unit_arrow_head_size, arrow_head_scale, unit_arrow_vector, arrow_vector, tail_location, linewidth, arrowcolor, linecolor)
+        end
+
+        if qZ != 0.0
+            unit_arrow_vector = [0.0, 0.0, qZ] / norm([0.0, 0.0, qZ])
+            arrow_vector = unit_arrow_vector .* arrow_scale
+            define_load_arrow!(ax, unit_arrow_head_size, arrow_head_scale, unit_arrow_vector, arrow_vector, tail_location, linewidth, arrowcolor, linecolor)
+        end
+
+    end
+
+end
+
+
+function define_load_arrow!(ax, unit_arrow_head_size, arrow_head_scale, unit_arrow_vector, arrow_vector, tail_location, linewidth, arrowcolor, linecolor)
+    
+ 
+    arrow_head_size = unit_arrow_head_size * arrow_head_scale
+
+    arrow_size_vector = arrow_head_scale * unit_arrow_vector
+
+
+    arrows!(ax, [tail_location[1]-arrow_vector[1] - arrow_size_vector[1]], [tail_location[2]-arrow_vector[2] - arrow_size_vector[2]], [tail_location[3]-arrow_vector[3]-arrow_size_vector[3]], [arrow_vector[1]], [arrow_vector[2]], [arrow_vector[3]], arrowsize = arrow_head_size, linewidth=linewidth,
+        arrowcolor = arrowcolor, linecolor = linecolor)
+
+end
+
+
+function show_element_local_y_axis!(ax, element, node, model, unit_arrow_head_size, arrow_head_scale, arrow_scale, arrowcolor, linecolor, linewidth)
+
+    for i in eachindex(element.numbers)
+
+        element_nodes = element.nodes[i]
+
+        #start node
+
+        start_index = findfirst(num->num==element_nodes[1], node.numbers)
+        end_index = findfirst(num->num==element_nodes[2], node.numbers)
+
+        Δ = node.coordinates[end_index] .- node.coordinates[start_index]
+
+        tail_location = node.coordinates[start_index] .+ Δ./2
+
+
+        unit_vector_Y = [0.0, 1.0, 0.0]
+
+        global_Y = model.properties.Γ[i][1:3,1:3]' * unit_vector_Y
+
+        # unit_arrow_vector = global_Y
+        arrow_vector = global_Y .* arrow_scale
+
+
+        arrow_head_size = unit_arrow_head_size * arrow_head_scale
+
+        # arrow_size_vector = arrow_head_scale * unit_arrow_vector
+
+
+        arrows!(ax, [tail_location[1]], [tail_location[2]], [tail_location[3]], [arrow_vector[1]], [arrow_vector[2]], [arrow_vector[3]], arrowsize = arrow_head_size, linewidth=linewidth,
+            arrowcolor = arrowcolor, linecolor = linecolor)
+
+    end
+
+end
+
+
 
 end #module
 
