@@ -103,10 +103,20 @@ end
     end_displacements::Array{Array{Float64, 1}}
 end
 
+@with_kw struct ElasticSupport
+
+    global_dof::Array{Int64}
+    global_stiffness::Array{Float64}
+
+end
+
+
 
 @with_kw struct FirstOrderEquations
   
     free_dof::Array{Int64}
+    fixed_dof::Array{Int64}
+    elastic_supports::ElasticSupport
     ke_local::Array{Array{Float64, 2}}
     ke_global::Array{Array{Float64, 2}}
     Ke::Array{Float64, 2}
@@ -138,12 +148,19 @@ end
   
 end
 
+@with_kw struct Reactions
+
+    nodes::Vector{Int64}
+    magnitudes::Vector{Float64}
+
+end
 
 @with_kw struct FirstOrderSolution
 
     nodal_displacements::Array{Array{Float64, 1}}
     element_forces::Array{Array{Float64, 1}}
     element_connections::ElementConnections
+    nodal_reactions::Array{Array{Float64, 1}}
 
 end
 
@@ -185,6 +202,7 @@ end
     solution::Union{FirstOrderSolution, SecondOrderSolution, ModalSolution}
 
 end
+
 
 
 
@@ -473,6 +491,14 @@ function first_order_analysis(node, cross_section, material, connection, element
 
     Ke = InstantFrame.assemble_global_matrix(ke_global, element_properties.global_dof)
 
+    free_global_dof, fixed_global_dof, elastic_supports = InstantFrame.define_free_global_dof(node, support)
+
+    for i in eachindex(elastic_supports.global_dof)  #add springs 
+
+        Ke[elastic_supports.global_dof[i], elastic_supports.global_dof[i]] += elastic_supports.global_stiffness[i]
+
+    end
+
     equiv_global_nodal_forces_uniform_load, local_fixed_end_forces, global_dof_nodal_forces_uniform_load = InstantFrame.calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, element_properties)
 
     global_dof_point_loads = InstantFrame.define_global_dof_point_loads(node, point_load)
@@ -481,8 +507,8 @@ function first_order_analysis(node, cross_section, material, connection, element
 
     forces = InstantFrame.Forces(equiv_global_nodal_forces_uniform_load, local_fixed_end_forces, global_dof_nodal_forces_uniform_load, global_dof_point_loads, F)
 
-    free_global_dof = InstantFrame.define_free_global_dof(node, support)
-
+    
+    #calculate nodal displacements
     Ff = F[free_global_dof]
     Ke_ff = Ke[free_global_dof, free_global_dof]
     uf = Ke_ff \ Ff
@@ -492,6 +518,37 @@ function first_order_analysis(node, cross_section, material, connection, element
 
     nodal_displacements = define_nodal_displacements(node, u)
 
+    #### calculate reaction ####
+    reactions = zeros(Float64, length(node.numbers)*6)
+
+    #get reactions from rigid supports
+    Ke_sf = Ke[fixed_global_dof, free_global_dof]
+    R = Ke_sf * uf
+    reactions[fixed_global_dof] = R
+
+    #get reactions from elastic supports
+    elastic_support_reactions = -u[elastic_supports.global_dof] .* elastic_supports.global_stiffness
+    reactions[elastic_supports.global_dof] = elastic_support_reactions
+
+    #add point loads to rigid support reactions 
+    reactions[fixed_global_dof] += -forces.global_dof_point_loads[fixed_global_dof]
+
+    #add uniform load equivalent nodal forces to rigid support reactions  
+    reactions[fixed_global_dof] += -forces.global_dof_nodal_forces_uniform_load[fixed_global_dof]
+
+    #package up reactions at each node, these are reactions from elastic supports and rigid supports
+    nodal_reactions = Array{Array{Float64, 1}}(undef, length(support.nodes))
+
+    num_dof_per_node = 6 #hard code this for now
+    for i in eachindex(support.nodes)
+
+        nodal_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (support.nodes[i]-1)
+        nodal_reactions[i] = reactions[nodal_dof]
+
+    end
+
+    ######
+
     #calculate element internal forces
     element_forces = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, element, uniform_load, local_fixed_end_forces, u)
 
@@ -499,9 +556,9 @@ function first_order_analysis(node, cross_section, material, connection, element
     element_connections = calculate_element_connection_deformations(element_properties, element, node, nodal_displacements, element_forces)
 
 
-    equations = FirstOrderEquations(free_global_dof, ke_local, ke_global, Ke)
+    equations = FirstOrderEquations(free_global_dof, fixed_global_dof, elastic_supports, ke_local, ke_global, Ke)
 
-    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections)
+    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections, nodal_reactions)
 
     model = Model(element_properties, forces, equations, solution)
 
@@ -658,9 +715,15 @@ function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, 
     local_fixed_end_forces[12] = +wy_local*L^2/12
 
     local_fixed_end_forces[3] = -wz_local*L/2
-    local_fixed_end_forces[5] = +wz_local*L^2/12
+    local_fixed_end_forces[5] = -wz_local*L^2/12
     local_fixed_end_forces[9] = -wz_local*L/2
-    local_fixed_end_forces[11] = -wz_local*L^2/12
+    local_fixed_end_forces[11] = +wz_local*L^2/12
+
+
+    # local_fixed_end_forces[3] = -wz_local*L/2
+    # local_fixed_end_forces[5] = -wz_local*L^2/12
+    # local_fixed_end_forces[9] = -wz_local*L/2
+    # local_fixed_end_forces[11] = +wz_local*L^2/12
 
     return local_fixed_end_forces
 
@@ -707,6 +770,7 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
     end
 
     return element_global_nodal_forces_uniform_load, local_fixed_end_forces, nodal_forces_uniform_load
+
 
 end
 
@@ -896,7 +960,17 @@ function define_free_global_dof(node, support)
 
     free_global_dof = vec(findall(dof->dof!=Inf, dof_support_stiffness))
 
-    return free_global_dof
+    fixed_global_dof = vec(findall(dof->dof==Inf, dof_support_stiffness))
+
+    elastic_support_dof = vec(findall(dof->(dof!=Inf)&(dof!=0.0), dof_support_stiffness))
+
+    elastic_support_dof = vec(findall(dof->(dof!=Inf)&(dof!=0.0), dof_support_stiffness))
+
+    elastic_support_stiffness = dof_support_stiffness[elastic_support_dof]
+
+    elastic_support = ElasticSupport(global_dof=elastic_support_dof, global_stiffness = elastic_support_stiffness)
+
+    return free_global_dof, fixed_global_dof, elastic_support
 
 end
 

@@ -21,9 +21,9 @@ num_elem = length(x)-1
 element_connectivity = [(i, i+1) for i=1:num_elem]
 element = InstantFrame.Element(numbers=1:length(element_connectivity), nodes=element_connectivity, orientation=zeros(Float64, length(element_connectivity)), connections=[("rigid", "rigid") for i in eachindex(element_connectivity)], cross_section=["beam" for i in eachindex(element_connectivity)], material=["steel" for i in eachindex(element_connectivity)])
 
-support = InstantFrame.Support(nodes=[1, 2, length(x)], stiffness=(uX=[Inf, 0.0, Inf], uY=[Inf,20000.0,Inf], uZ=[Inf,0.0,Inf], rX=[Inf,0.0,Inf], rY=[Inf,0.0,Inf], rZ=[Inf,0.0,Inf]))
+support = InstantFrame.Support(nodes=[1, 2, length(x)], stiffness=(uX=[Inf, 0.0, Inf], uY=[Inf,0.0,Inf], uZ=[Inf,0.0,Inf], rX=[Inf,0.0,Inf], rY=[Inf,0.0,Inf], rZ=[Inf,0.0,Inf]))
 
-uniform_load = InstantFrame.UniformLoad(labels=["test"], elements=[2], loads=(qX=zeros(Float64, 1), qY=ones(Float64, 1)*-1000.0/12, qZ=zeros(Float64, 1), mX=zeros(Float64, 1), mY=zeros(Float64, 1), mZ=zeros(Float64, 1)))
+uniform_load = InstantFrame.UniformLoad(labels=["test"], elements=[1,2], loads=(qX=zeros(Float64, 2), qY=zeros(Float64, 2), qZ=ones(Float64, 2)*-1000.0/12, mX=zeros(Float64, 2), mY=zeros(Float64, 2), mZ=zeros(Float64, 2)))
 
 point_load = InstantFrame.PointLoad(nothing)
 
@@ -35,17 +35,29 @@ model = InstantFrame.solve(node, cross_section, material, connection, element, s
 Ke_sf = model.equations.Ke[model.equations.fixed_dof, model.equations.free_dof]
 R = Ke_sf * model.solution.uf
 
+reactions = zeros(Float64, length(node.numbers)*6)
 
+reactions[model.equations.fixed_dof] = R
 
-nodal_displacements = Array{Array{Float64, 1}}(undef, length(node.numbers))
+elastic_support_reactions = -model.solution.u[model.equations.elastic_supports.global_dof] .* model.equations.elastic_supports.global_stiffness
 
-    num_dof_per_node = 6 #hard code this for now
-    for i in eachindex(node.numbers)
+reactions[model.equations.elastic_supports.global_dof] = elastic_support_reactions
 
-        nodal_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (i-1)
-        nodal_displacements[i] = u[nodal_dof]
+#add point loads to reactions 
+reactions[model.equations.fixed_dof] += -model.forces.global_dof_point_loads[model.equations.fixed_dof]
 
-    end
+#add uniform load equivalent nodal forces to reactions  
+reactions[model.equations.fixed_dof] += -model.forces.global_dof_nodal_forces_uniform_load[model.equations.fixed_dof]
+
+nodal_reactions = Array{Array{Float64, 1}}(undef, length(support.nodes))
+
+num_dof_per_node = 6 #hard code this for now
+for i in eachindex(support.nodes)
+
+    nodal_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (support.nodes[i]-1)
+    nodal_reactions[i] = reactions[nodal_dof]
+
+end
 
 
 

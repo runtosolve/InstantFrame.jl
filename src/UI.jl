@@ -147,7 +147,7 @@ end
 
 
 
-function display_element_deformed_shape(element_XYZ, Δ, scale, ax)
+function show_element_deformed_shape!(ax, element_XYZ, Δ, scale, color)
 
     X = [element_XYZ[i][1] for i in eachindex(element_XYZ)]
     Y = [element_XYZ[i][2] for i in eachindex(element_XYZ)]
@@ -160,12 +160,12 @@ function display_element_deformed_shape(element_XYZ, Δ, scale, ax)
 
     for i=1:(length(X)-1)
 
-        scatterlines!(ax, [X[i], X[i+1]], [Y[i], Y[i+1]], [Z[i], Z[i+1]], markersize = 5)
-        scatterlines!(ax, [X[i] + scale[1] * ΔX[i], X[i+1] + scale[1] * ΔX[i+1]], [Y[i] + scale[2] * ΔY[i], Y[i+1] + scale[2] * ΔY[i+1]], [Z[i] + scale[3] * ΔZ[i], Z[i+1] + scale[3] * ΔZ[i+1]], markersize = 5,  linestyle=:dash)
+        # scatterlines!(ax, [X[i], X[i+1]], [Y[i], Y[i+1]], [Z[i], Z[i+1]], markersize = 5)
+        lines!(ax, [X[i] + scale[1] * ΔX[i], X[i+1] + scale[1] * ΔX[i+1]], [Y[i] + scale[2] * ΔY[i], Y[i+1] + scale[2] * ΔY[i+1]], [Z[i] + scale[3] * ΔZ[i], Z[i+1] + scale[3] * ΔZ[i+1]], linestyle=:dash, color=color, linewidth=2)
 
     end
 
-    return ax
+    # return ax
 
 end
 
@@ -193,7 +193,7 @@ function define_global_element_displacements(u, global_dof, element, element_con
 
 end
 
-function display_model_deformed_shape(nodal_displacements, element_connections, element, node, properties, scale)
+function show_model_deformed_shape(nodal_displacements, element_connections, element, node, properties, scale)
 
     n = vec(ones(Int64, size(properties.L, 1)) * 11)
 
@@ -215,7 +215,7 @@ function display_model_deformed_shape(nodal_displacements, element_connections, 
     ax = Axis3(figure[1,1])
 
     for i in eachindex(element_display_coords)
-        ax = display_element_deformed_shape(element_display_coords[i], element_display_Δ[i], scale, ax)
+        ax = show_element_deformed_shape(element_display_coords[i], element_display_Δ[i], scale, ax)
     end
 
     # ax.azimuth[] = 3π/2
@@ -416,6 +416,27 @@ function show_element_local_y_axis!(ax, element, node, model, unit_arrow_head_si
         arrows!(ax, [tail_location[1]], [tail_location[2]], [tail_location[3]], [arrow_vector[1]], [arrow_vector[2]], [arrow_vector[3]], arrowsize = arrow_head_size, linewidth=linewidth,
             arrowcolor = arrowcolor, linecolor = linecolor)
 
+    end
+
+end
+
+function show_deformed_shape!(ax, nodal_displacements, global_dof, element, node, properties, element_connections, n, scale, linecolor)
+
+    u = Array{Float64}(undef, 0)
+
+    for i in eachindex(nodal_displacements)
+
+        u = [u; nodal_displacements[i]]
+
+    end
+
+    u_global_e = InstantFrame.UI.define_global_element_displacements(u, global_dof, element, element_connections)
+    u_local_e = [properties.Γ[i]*u_global_e[i] for i in eachindex(u_global_e)]
+
+    element_display_coords, element_display_Δ = InstantFrame.UI.get_display_coords(element, node, properties, u_local_e, n)
+
+    for i in eachindex(element_display_coords)
+        InstantFrame.UI.show_element_deformed_shape!(ax, element_display_coords[i], element_display_Δ[i], scale, linecolor)
     end
 
 end
