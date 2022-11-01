@@ -88,6 +88,7 @@ PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, loads=nothing)
     J::Array{Float64}
     E::Array{Float64}
     ν::Array{Float64}
+    G::Array{Float64}
     ρ::Array{Float64}
 
     Γ::Array{Array{Float64, 2}}
@@ -344,6 +345,7 @@ function define_element_properties(node, cross_section, material, element, conne
     J = Array{Float64}(undef, num_elem)
     E = Array{Float64}(undef, num_elem)
     ν = Array{Float64}(undef, num_elem)
+    G = Array{Float64}(undef, num_elem)
     ρ = Array{Float64}(undef, num_elem)
     start_connection = Array{NamedTuple{(:ux, :uy, :uz, :rx, :ry, :rz), NTuple{6, Float64}}}(undef, num_elem)
     end_connection = Array{NamedTuple{(:ux, :uy, :uz, :rx, :ry, :rz), NTuple{6, Float64}}}(undef, num_elem)
@@ -369,6 +371,7 @@ function define_element_properties(node, cross_section, material, element, conne
         E[i] = material.E[index]
         ν[i] = material.ν[index]
         ρ[i] = material.ρ[index]
+        G[i] = E[i]/(2*(1+ν[i]))
 
         #element end conditions
         index = findfirst(name->name == element.connections[i][1], connection.names)
@@ -390,7 +393,7 @@ function define_element_properties(node, cross_section, material, element, conne
 
     end
 
-    element_properties = ElementProperties(L, A, Iz, Iy, Io, J, E, ν, ρ, Γ, global_dof, start_connection, end_connection)
+    element_properties = ElementProperties(L, A, Iz, Iy, Io, J, E, ν, G, ρ, Γ, global_dof, start_connection, end_connection)
 
     return element_properties
 
@@ -774,6 +777,21 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
 
 end
 
+
+function define_local_elastic_element_torsional_stiffness_matrix_partially_restrained(J, G, L, k1, k2)
+
+    k1, k2 = connection_zeros_and_inf(k1, k2, G, J)
+
+    α1 = k1/(G*J/L)
+    α2 = k2/(G*J/L)
+
+    kt = G*J/L * [α1 0.0
+                  0.0 α2]
+
+    return kt
+
+end
+
 function modify_element_local_connection_stiffness(element_properties, ke_local, element)
 
     for i in eachindex(ke_local)
@@ -788,12 +806,19 @@ function modify_element_local_connection_stiffness(element_properties, ke_local,
                 ke_local_xy = InstantFrame.define_local_elastic_element_stiffness_matrix_partially_restrained(element_properties.Iz[index], element_properties.E[index], element_properties.L[index], element_properties.start_connection[index][6], element_properties.end_connection[index][6])
                 ke_local_xz = InstantFrame.define_local_elastic_element_stiffness_matrix_partially_restrained(element_properties.Iy[index], element_properties.E[index], element_properties.L[index], element_properties.start_connection[index][5], element_properties.end_connection[index][5])
     
+                ke_local_torsion = define_local_elastic_element_torsional_stiffness_matrix_partially_restrained(element_properties.J[index], element_properties.G[index], element_properties.L[index], element_properties.start_connection[index][4], element_properties.end_connection[index][4])
+
+                #flexural dof
                 dof = [2, 6, 8, 12]
                 ke_local[index][dof, dof] .= ke_local_xy
     
                 dof = [3, 5, 9, 11]
                 ke_local[index][dof, dof] .= ke_local_xz
-    
+
+                #torsion dof
+                dof = [4, 10]
+                ke_local[index][dof, dof] .= ke_local_torsion
+                
         end
     
     end
@@ -1024,6 +1049,8 @@ function calculate_element_connection_deformations(properties, element, node, no
                 E = properties.E[index]
                 I = properties.Iz[index]
                 L = properties.L[index]
+                G = properties.G[index]
+                J = properties.J[index]
 
                 node_i_num = element.nodes[index][1]
                 node_j_num = element.nodes[index][2]
@@ -1062,6 +1089,19 @@ function calculate_element_connection_deformations(properties, element, node, no
                 u_connection_local[5] = θij[1]
                 u_connection_local[11] = θij[2]
 
+                #torsion 
+                k1 = properties.start_connection[index][4]
+                k2 = properties.end_connection[index][4]
+                k1, k2 = connection_zeros_and_inf(k1, k2, G, J)
+                θx1 = u_local_element[4]
+                θx2 = u_local_element[10]
+                Ti = element_forces[index][4]
+                Tj = element_forces[index][10]
+                θij = calculate_connection_rotation_torsion(k1, k2, G, J, L, θx1, θx2, Ti, Tj)  
+                u_connection_local[4] = θij[1]
+                u_connection_local[10] = θij[2]
+
+
                 u_connection_global = properties.Γ[index]' * u_connection_local  #convert from local to global
 
                 push!(u_element_connection, u_connection_global)
@@ -1096,6 +1136,29 @@ function calculate_connection_rotation(k1, k2, E, I, L, v1, θ1, v2, θ2, Mi, Mj
     M = [Mi, Mj]
 
     θ = kB^-1*(M - kC*u)
+
+    return θ
+
+end
+
+
+
+function calculate_connection_rotation_torsion(k1, k2, G, J, L, θ1, θ2, Ti, Tj)
+
+    α1 = k1/(G*J/L)
+    α2 = k2/(G*J/L)
+
+    kB = (G*J/L)*[(1-α1)/2  -1/2
+                -1/2   (1-α2)/2]
+
+    kC = (G*J/L)*[α1/2  0
+                  0    α2/2]
+
+    u = [θ1, θ2]
+
+    T = [Ti, Tj]
+
+    θ = kB^-1*(T - kC*u)
 
     return θ
 
