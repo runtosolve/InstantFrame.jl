@@ -441,7 +441,43 @@ function show_deformed_shape!(ax, nodal_displacements, global_dof, element, node
 
 end
 
+function show_node_numbers!(ax, node, textsize, color)
 
+    text!(ax,
+        [Point3f(node.coordinates[i][1], node.coordinates[i][2], node.coordinates[i][3]) for i in eachindex(node.coordinates)],
+        text = [string(node.numbers[i]) for i in eachindex(node.numbers)],
+        # rotation = [i / 7 * 1.5pi for i in 1:7],
+        color = color,
+        # align = (:left, :baseline),
+        textsize = textsize,
+        # markerspace = :data
+    )
+
+end
+
+function show_element_numbers!(ax, element, node, textsize, color)
+
+    for i in eachindex(element.numbers)
+
+        start_index = findfirst(num->num==element.nodes[i][1], node.numbers)
+        end_index = findfirst(num->num==element.nodes[i][2], node.numbers)
+
+        Δ = node.coordinates[end_index] .- node.coordinates[start_index]
+
+        text_location = node.coordinates[start_index] .+ Δ./2
+
+        text!(ax,
+            [Point3f(text_location[1], text_location[2], text_location[3])],
+            text = [string(element.numbers[i])],
+            # rotation = [i / 7 * 1.5pi for i in 1:7],
+            color = color,
+            # align = (:left, :baseline),
+            textsize = textsize,
+            # markerspace = :data
+        )
+    end
+
+end
 
 end #module
 
