@@ -162,6 +162,8 @@ end
     element_forces::Array{Array{Float64, 1}}
     element_connections::ElementConnections
     nodal_reactions::Array{Array{Float64, 1}}
+    u::Vector{Float64}
+    uf::Vector{Float64}
 
 end
 
@@ -428,11 +430,15 @@ function calculate_element_internal_forces(properties, ke_local, element, unifor
 
         if !isnothing(uniform_load.elements)
 
-            index = findfirst(num->num==elem_num, uniform_load.elements)
+            index = findall(num->num==elem_num, uniform_load.elements)
 
-            if !isnothing(index)   #add in fixed end forces
+            if !isnothing(index) #add in fixed end forces
 
-                P_element_local[i] += local_fixed_end_forces[index]
+                for j in eachindex(index)  #if there are multiple load assignments on one member, need a loop 
+
+                    P_element_local[i] += local_fixed_end_forces[index[j]]
+
+                end
 
             end
 
@@ -561,7 +567,7 @@ function first_order_analysis(node, cross_section, material, connection, element
 
     equations = FirstOrderEquations(free_global_dof, fixed_global_dof, elastic_supports, ke_local, ke_global, Ke)
 
-    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections, nodal_reactions)
+    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections, nodal_reactions, u, uf)
 
     model = Model(element_properties, forces, equations, solution)
 
@@ -757,6 +763,31 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
 
             local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index])
 
+            #remove fixed end moments if there are moment end releases 
+            if element_properties.start_connection[elem_index].rx==0.0
+                local_fixed_end_forces[i][4] = 0.0
+            end
+            
+            if element_properties.start_connection[elem_index].ry==0.0
+                local_fixed_end_forces[i][5] = 0.0
+            end
+
+            if element_properties.start_connection[elem_index].rz==0.0
+                local_fixed_end_forces[i][6] = 0.0
+            end
+
+            if element_properties.end_connection[elem_index].rx==0.0
+                local_fixed_end_forces[i][10] = 0.0
+            end
+            
+            if element_properties.end_connection[elem_index].ry==0.0
+                local_fixed_end_forces[i][11] = 0.0
+            end
+
+            if element_properties.end_connection[elem_index].rz==0.0
+                local_fixed_end_forces[i][12] = 0.0
+            end
+
             global_fixed_end_forces = element_properties.Γ[elem_index]' * local_fixed_end_forces[i]
 
             element_global_nodal_forces_uniform_load[i] = -global_fixed_end_forces
@@ -785,8 +816,10 @@ function define_local_elastic_element_torsional_stiffness_matrix_partially_restr
     α1 = k1/(G*J/L)
     α2 = k2/(G*J/L)
 
-    kt = G*J/L * [α1 0.0
-                  0.0 α2]
+    α = 1 + 1/α1 + 1/α2
+
+    kt = G*J/L * [1/α -1/α
+                  -1/α 1/α]
 
     return kt
 
@@ -833,13 +866,13 @@ function connection_zeros_and_inf(k1, k2, E, I)
     if k1 == Inf  #need big number instead of Inf because 0.0*Inf = NaN
         k1 = E*I*10.0^20
     elseif k1 == 0.0
-        k1 = E*I*10.0^-20
+        k1 = E*I*10.0^-30
     end
 
     if k2 == Inf #need big number instead of Inf
         k2 = E*I*10.0^20
     elseif k2 == 0.0
-        k2 = E*I*10.0^-20
+        k2 = E*I*10.0^-30
     end
 
     return k1, k2

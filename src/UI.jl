@@ -457,6 +457,8 @@ end
 
 function show_element_numbers!(ax, element, node, textsize, color)
 
+
+    text_location = Vector{Tuple{Float64, Float64, Float64}}(undef, size(element.numbers, 1))
     for i in eachindex(element.numbers)
 
         start_index = findfirst(num->num==element.nodes[i][1], node.numbers)
@@ -464,18 +466,20 @@ function show_element_numbers!(ax, element, node, textsize, color)
 
         Δ = node.coordinates[end_index] .- node.coordinates[start_index]
 
-        text_location = node.coordinates[start_index] .+ Δ./2
+        text_location[i] = node.coordinates[start_index] .+ Δ./2
 
-        text!(ax,
-            [Point3f(text_location[1], text_location[2], text_location[3])],
-            text = [string(element.numbers[i])],
-            # rotation = [i / 7 * 1.5pi for i in 1:7],
-            color = color,
-            # align = (:left, :baseline),
-            textsize = textsize,
-            # markerspace = :data
-        )
     end
+
+    text!(ax,
+        [Point3f(text_location[i][1], text_location[i][2], text_location[i][3]) for i in eachindex(text_location)],
+        text = [string(element.numbers[i]) for i in eachindex(element.numbers)],
+        # rotation = [i / 7 * 1.5pi for i in 1:7],
+        color = color,
+        # align = (:left, :baseline),
+        textsize = textsize,
+        # markerspace = :data
+    )
+  
 
 end
 
