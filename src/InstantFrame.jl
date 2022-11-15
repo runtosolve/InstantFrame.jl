@@ -702,14 +702,14 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
     Ke_ff = Ke[free_global_dof, free_global_dof]
     Mff = M[free_global_dof, free_global_dof]
 
-    ωn_squared = eigvals(Ke_ff, Mff)
+    ωn_squared = real.(eigvals(Ke_ff, Mff))
     ωn = sqrt.(ωn_squared)
     ϕff = eigvecs(Ke_ff, Mff)
 
     ϕ = [zeros(Float64, size(M, 1)) for i in eachindex(ωn)]
 
     for i in eachindex(ωn)
-        ϕ[i][free_global_dof] .= ϕff[:, i]
+        ϕ[i][free_global_dof] .= real.(ϕff[:, i])
     end
 
 
