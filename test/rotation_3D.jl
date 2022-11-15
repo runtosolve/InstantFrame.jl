@@ -43,5 +43,28 @@ isapprox(Γ_MGZ, model.properties.Γ[1], rtol=0.01)
 
 
 
+A = [0.0, 0.0, 0.0]
+B = [10.0, 5.0, 3.0]
+β = 0.0
 
 
+AB = B - A
+
+ΔX = AB[1]
+ΔZ = AB[3]
+ΔY = AB[2]
+
+ρ = atan(-ΔZ, ΔX)
+
+rad2deg(ρ)
+
+proj_AB_xz = sqrt(ΔX^2 + ΔZ^2)
+
+χ = atan(ΔY, proj_AB_xz)
+rad2deg(χ)
+
+current_local_y_axis = RotZ(-χ) * RotY(-ρ) * [0.0, 1.0, 0.0]  #where y-local is pointing after Y and Z rotations 
+
+ω = acos(dot(current_local_y_axis, [0.0, 1.0, 0.0])/ norm(current_local_y_axis))
+
+rad2deg(ω)

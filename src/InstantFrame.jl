@@ -303,23 +303,58 @@ function define_local_geometric_stiffness_matrix(P, L)
 end
 
 
+# function define_rotation_matrix(A, B, β)
+
+#     #ρ is x-z plane,  χ is x-y plane , ω is y-z plane
+#     AB = B - A
+
+#     length_AB = norm(AB)
+
+#     χ = π/2 - acos(AB[2]/length_AB)
+
+#     if (AB[3]==0.0) & (AB[1]==0.0)  #avoid 0/0 case
+#         ρ = 0.0    
+#     else
+#         ρ = -atan(AB[3]/AB[1])
+#     end
+
+#     ω = β
+
+#     γ = RotXZY(-ω, -χ, -ρ)
+
+#     Γ = zeros(Float64, (12, 12))
+
+#     Γ[1:3, 1:3] .= γ
+#     Γ[4:6, 4:6] .= γ
+#     Γ[7:9, 7:9] .= γ
+#     Γ[10:12, 10:12] .= γ
+
+#     return Γ
+
+# end
+
+
 function define_rotation_matrix(A, B, β)
-    #ρ is x-z plane,  χ is x-y plane , ω is y-z plane
+
     AB = B - A
 
-    length_AB = norm(AB)
+    ΔX = AB[1]
+    ΔZ = AB[3]
+    ΔY = AB[2]
 
-    χ = π/2 - acos(AB[2]/length_AB)
+    #Rotation global coordinate system about Y axis
+    ρ = atan(-ΔZ, ΔX)
 
-    if (AB[3]==0.0) & (AB[1]==0.0)  #avoid 0/0 case
-        ρ = 0.0    
-    else
-        ρ = -atan(AB[3]/AB[1])
-    end
+    #Rotation revised global coordinate system about Z axis
+    proj_AB_xz = sqrt(ΔX^2 + ΔZ^2)
+    χ = atan(ΔY, proj_AB_xz)
 
-    ω = β
+    #Rotation revised global coordinate system about X axis
+    current_local_y_axis = RotZ(-χ) * RotY(-ρ) * [0.0, 1.0, 0.0]  #where Y is pointing after Y and Z rotations 
+    ω = acos(dot(current_local_y_axis, [0.0, 1.0, 0.0])/ norm(current_local_y_axis))
 
-    γ = RotXZY(-ω, -χ, -ρ)
+    #matrix of direction cosines
+    γ = RotX(-(ω+β)) * RotZ(-χ) * RotY(-ρ) # add β here to rotate local y-axis to orient cross-section in global coordinate system 
 
     Γ = zeros(Float64, (12, 12))
 
@@ -648,7 +683,9 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
 
     element_properties = InstantFrame.define_element_properties(node, cross_section, material, element, connection)
 
-    free_global_dof = InstantFrame.define_free_global_dof(node, support)
+    # free_global_dof = InstantFrame.define_free_global_dof(node, support)
+
+    free_global_dof, fixed_global_dof, elastic_supports = InstantFrame.define_free_global_dof(node, support)
 
     ke_local = [InstantFrame.define_local_elastic_stiffness_matrix(element_properties.Iy[i], element_properties.Iz[i], element_properties.A[i], element_properties.J[i], element_properties.E[i], element_properties.ν[i], element_properties.L[i]) for i in eachindex(element_properties.L)]
 
