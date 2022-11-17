@@ -402,10 +402,10 @@ function show_element_local_y_axis!(ax, element, node, model, unit_arrow_head_si
 
         unit_vector_Y = [0.0, 1.0, 0.0]
 
-        global_Y = model.properties.Γ[i][1:3,1:3]' * unit_vector_Y
+        local_Y = model.properties.Γ[i][1:3,1:3]' * unit_vector_Y
 
         # unit_arrow_vector = global_Y
-        arrow_vector = global_Y .* arrow_scale
+        arrow_vector = local_Y .* arrow_scale
 
 
         arrow_head_size = unit_arrow_head_size * arrow_head_scale

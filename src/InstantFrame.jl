@@ -91,6 +91,7 @@ PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, loads=nothing)
     G::Array{Float64}
     ρ::Array{Float64}
 
+    rotation_angles::Array{NamedTuple{(:Y, :Z, :X), NTuple{3, Float64}}}
     Γ::Array{Array{Float64, 2}}
     global_dof::Array{Array{Int64, 1}}
 
@@ -350,11 +351,15 @@ function define_rotation_matrix(A, B, β)
     χ = atan(ΔY, proj_AB_xz)
 
     #Rotation revised global coordinate system about X axis
-    current_local_y_axis = RotZ(-χ) * RotY(-ρ) * [0.0, 1.0, 0.0]  #where Y is pointing after Y and Z rotations 
-    ω = acos(dot(current_local_y_axis, [0.0, 1.0, 0.0])/ norm(current_local_y_axis))
+    # current_local_y_axis = RotZ(-χ) * RotY(-ρ) * [0.0, 1.0, 0.0]  #where Y is pointing after Y and Z rotations 
+    # ω = acos(dot(current_local_y_axis, [0.0, 1.0, 0.0])/ norm(current_local_y_axis))
 
-    #matrix of direction cosines
-    γ = RotX(-(ω+β)) * RotZ(-χ) * RotY(-ρ) # add β here to rotate local y-axis to orient cross-section in global coordinate system 
+    # # matrix of direction cosines
+    # γ = RotX(-(ω+β)) * RotZ(-χ) * RotY(-ρ) # add β here to rotate local y-axis to orient cross-section in global coordinate system 
+
+    ω = β
+
+    γ = RotYZX(ρ, χ, ω)' #transpose!
 
     Γ = zeros(Float64, (12, 12))
 
@@ -363,7 +368,9 @@ function define_rotation_matrix(A, B, β)
     Γ[7:9, 7:9] .= γ
     Γ[10:12, 10:12] .= γ
 
-    return Γ
+    angles = (Y=ρ, Z=χ, X=ω)
+
+    return Γ, angles 
 
 end
 
@@ -386,6 +393,7 @@ function define_element_properties(node, cross_section, material, element, conne
     ρ = Array{Float64}(undef, num_elem)
     start_connection = Array{NamedTuple{(:ux, :uy, :uz, :rx, :ry, :rz), NTuple{6, Float64}}}(undef, num_elem)
     end_connection = Array{NamedTuple{(:ux, :uy, :uz, :rx, :ry, :rz), NTuple{6, Float64}}}(undef, num_elem)
+    rotation_angles = Array{NamedTuple{(:Y, :Z, :X), NTuple{3, Float64}}}(undef, num_elem)
 
     for i in eachindex(element.numbers)
 
@@ -420,7 +428,7 @@ function define_element_properties(node, cross_section, material, element, conne
         L[i] = norm(node_j - node_i)
 
         #rotation matrix
-        Γ[i] = define_rotation_matrix(node_i, node_j, element.orientation[i])
+        Γ[i], rotation_angles[i] = define_rotation_matrix(node_i, node_j, element.orientation[i])
 
         #global dof for each element
         num_dof_per_node = 6 #hard code this for now
@@ -430,7 +438,7 @@ function define_element_properties(node, cross_section, material, element, conne
 
     end
 
-    element_properties = ElementProperties(L, A, Iz, Iy, Io, J, E, ν, G, ρ, Γ, global_dof, start_connection, end_connection)
+    element_properties = ElementProperties(L, A, Iz, Iy, Io, J, E, ν, G, ρ, rotation_angles, Γ, global_dof, start_connection, end_connection)
 
     return element_properties
 
@@ -761,9 +769,9 @@ function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, 
     local_fixed_end_forces[12] = +wy_local*L^2/12
 
     local_fixed_end_forces[3] = -wz_local*L/2
-    local_fixed_end_forces[5] = -wz_local*L^2/12
+    local_fixed_end_forces[5] = +wz_local*L^2/12
     local_fixed_end_forces[9] = -wz_local*L/2
-    local_fixed_end_forces[11] = +wz_local*L^2/12
+    local_fixed_end_forces[11] = -wz_local*L^2/12
 
 
     # local_fixed_end_forces[3] = -wz_local*L/2

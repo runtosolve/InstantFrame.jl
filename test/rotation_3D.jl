@@ -48,6 +48,29 @@ B = [10.0, 5.0, 3.0]
 β = 0.0
 
 
+# AB = B - A
+
+# ΔX = AB[1]
+# ΔZ = AB[3]
+# ΔY = AB[2]
+
+# ρ = atan(-ΔZ, ΔX)
+
+# rad2deg(ρ)
+
+# proj_AB_xz = sqrt(ΔX^2 + ΔZ^2)
+
+# χ = atan(ΔY, proj_AB_xz)
+# rad2deg(χ)
+
+# current_local_y_axis = RotZ(-χ) * RotY(-ρ) * [0.0, 1.0, 0.0]  #where y-local is pointing after Y and Z rotations 
+
+# ω = acos(dot(current_local_y_axis, [0.0, 1.0, 0.0])/ norm(current_local_y_axis))
+
+# rad2deg(ω)
+
+
+
 AB = B - A
 
 ΔX = AB[1]
@@ -56,15 +79,22 @@ AB = B - A
 
 ρ = atan(-ΔZ, ΔX)
 
-rad2deg(ρ)
-
 proj_AB_xz = sqrt(ΔX^2 + ΔZ^2)
 
 χ = atan(ΔY, proj_AB_xz)
-rad2deg(χ)
 
-current_local_y_axis = RotZ(-χ) * RotY(-ρ) * [0.0, 1.0, 0.0]  #where y-local is pointing after Y and Z rotations 
+RotY(ρ)'
 
-ω = acos(dot(current_local_y_axis, [0.0, 1.0, 0.0])/ norm(current_local_y_axis))
+RotZ(χ)'
 
-rad2deg(ω)
+RotX(π/2 - π/3)'
+
+RotYZX(ρ, χ, π/2 - π/3)'
+
+ω = β
+
+x_axis = RotYZX(ρ, χ, ω) * [1.0, 0.0, 0.0]
+y_axis = RotYZX(ρ, χ, ω) * [0.0, 1.0, 0.0]
+z_axis = RotYZX(ρ, χ, ω) * [0.0, 0.0, 1.0]
+
+RotYZX(ρ, χ, ω)' * [1.0, 0.0, 0.0]
