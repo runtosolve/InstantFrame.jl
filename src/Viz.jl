@@ -1,4 +1,4 @@
-module UI
+module Viz
 
 using GLMakie, InstantFrame, LinearAlgebra
 
@@ -401,18 +401,17 @@ function show_element_local_y_axis!(ax, element, node, model, unit_arrow_head_si
 
 
         unit_vector_Y = [0.0, 1.0, 0.0]
-
         local_Y = model.properties.Γ[i][1:3,1:3]' * unit_vector_Y
-
         # unit_arrow_vector = global_Y
         arrow_vector = local_Y .* arrow_scale
-
-
         arrow_head_size = unit_arrow_head_size * arrow_head_scale
+        arrows!(ax, [tail_location[1]], [tail_location[2]], [tail_location[3]], [arrow_vector[1]], [arrow_vector[2]], [arrow_vector[3]], arrowsize = arrow_head_size, linewidth=linewidth,
+            arrowcolor = arrowcolor, linecolor = linecolor)
 
-        # arrow_size_vector = arrow_head_scale * unit_arrow_vector
-
-
+        unit_vector_X = [1.0, 0.0, 0.0]
+        local_X = model.properties.Γ[i][1:3,1:3]' * unit_vector_X
+        arrow_vector = local_X .* arrow_scale
+        arrow_head_size = unit_arrow_head_size * arrow_head_scale
         arrows!(ax, [tail_location[1]], [tail_location[2]], [tail_location[3]], [arrow_vector[1]], [arrow_vector[2]], [arrow_vector[3]], arrowsize = arrow_head_size, linewidth=linewidth,
             arrowcolor = arrowcolor, linecolor = linecolor)
 

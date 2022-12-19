@@ -7,7 +7,7 @@ material = InstantFrame.Material(names=["steel"], E=[200.0], ν=[0.3], ρ=[8000/
 
 cross_section = InstantFrame.CrossSection(names=["beam ab", "beam bc"], A=[6E3, 4E3], Iy=[700E6, 540E6], Iz=[200E6, 50E6], J=[300E3, 100E3])
 
-connection = InstantFrame.Connection(names=["rigid", "partial restraint"], stiffness=(ux=[Inf, Inf], uy=[Inf, Inf], uz=[Inf, Inf], rx=[Inf, Inf], ry=[Inf, Inf], rz=[Inf, 1000.0]))
+connection = InstantFrame.Connection(names=["rigid", "partial restraint"], stiffness=(ux=[Inf, Inf], uy=[Inf, Inf], uz=[Inf, Inf], rx=[Inf, Inf], ry=[Inf, Inf], rz=[Inf, 1.0]))
 
 node = InstantFrame.Node(numbers=[1, 2, 3], coordinates=[(0.0, 0.0, 0.0), (8000.0, 0.0, 0.0), (13000.0, 0.0, 0.0)])
 
@@ -61,5 +61,6 @@ ke = α * (E * I / L) .* ke
 #compare to local stiffness matrix from model
 dof = [2, 6, 8, 12]
 isapprox(triu(ke), triu(model.equations.ke_local[1])[dof, dof])
+
 
 

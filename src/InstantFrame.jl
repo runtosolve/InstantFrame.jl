@@ -2,9 +2,13 @@ module InstantFrame
 
 using SparseArrays, StaticArrays, LinearAlgebra, Rotations, Parameters, NonlinearSolve
 
-export UI
-include("UI.jl")
-using .UI
+export Viz
+include("Viz.jl")
+using .Viz
+
+export Tools
+include("Tools.jl")
+using .Tools
 
 
 @with_kw struct Material
@@ -26,7 +30,7 @@ end
 
 end
 
-@with_kw struct Connection
+@with_kw mutable struct Connection
 
     names::Array{String}
     stiffness::NamedTuple{(:ux, :uy, :uz, :rx, :ry, :rz), NTuple{6, Vector{Float64}}}
@@ -40,7 +44,7 @@ end
 
 end
 
-@with_kw struct Element
+@with_kw mutable struct Element
 
     numbers::Array{Int64}
     nodes::Array{Tuple{Int64, Int64}}
@@ -51,7 +55,7 @@ end
 
 end
 
-@with_kw struct Support
+@with_kw mutable struct Support
 
     nodes::Array{Int64}
     stiffness::NamedTuple{(:uX, :uY, :uZ, :rX, :rY, :rZ), NTuple{6, Vector{Float64}}}
@@ -62,7 +66,7 @@ end
 
     labels::Union{Array{String}, Nothing}
     elements::Union{Array{Int64}, Nothing}
-    loads::Union{NamedTuple{(:qX, :qY, :qZ, :mX, :mY, :mZ), NTuple{6, Vector{Float64}}}, Nothing}
+    magnitudes::Union{NamedTuple{(:qX, :qY, :qZ, :mX, :mY, :mZ), NTuple{6, Vector{Float64}}}, Nothing}
 
 end
 
@@ -72,7 +76,7 @@ UniformLoad(nothing) = UniformLoad(labels=nothing, elements=nothing, loads=nothi
 
     labels::Union{Array{String}, Nothing}
     nodes::Union{Array{Int64}, Nothing}
-    loads::Union{NamedTuple{(:FX, :FY, :FZ, :MX, :MY, :MZ), NTuple{6, Vector{Float64}}}, Nothing}
+    magnitudes::Union{NamedTuple{(:FX, :FY, :FZ, :MX, :MY, :MZ), NTuple{6, Vector{Float64}}}, Nothing}
 
 end
 
@@ -102,7 +106,7 @@ end
 
 @with_kw struct ElementConnections
     elements::Array{Int64, 1}
-    end_displacements::Array{Array{Float64, 1}}
+    displacements::Array{Array{Float64, 1}}
 end
 
 @with_kw struct ElasticSupport
@@ -159,10 +163,10 @@ end
 
 @with_kw struct FirstOrderSolution
 
-    nodal_displacements::Array{Array{Float64, 1}}
-    element_forces::Array{Array{Float64, 1}}
-    element_connections::ElementConnections
-    nodal_reactions::Array{Array{Float64, 1}}
+    displacements::Array{Array{Float64, 1}}
+    forces::Array{Array{Float64, 1}}
+    connections::ElementConnections
+    reactions::Array{Array{Float64, 1}}
     u::Vector{Float64}
     uf::Vector{Float64}
 
@@ -479,7 +483,41 @@ function calculate_element_internal_forces(properties, ke_local, element, unifor
 
                 for j in eachindex(index)  #if there are multiple load assignments on one member, need a loop 
 
-                    P_element_local[i] += local_fixed_end_forces[index[j]]
+                    P_element_local[i][1] += local_fixed_end_forces[index[j]][1]
+                    P_element_local[i][2] += local_fixed_end_forces[index[j]][2]
+                    P_element_local[i][3] += local_fixed_end_forces[index[j]][3]
+                    P_element_local[i][4] += local_fixed_end_forces[index[j]][4]
+
+                    #deal with internal moment sign switch for partially rigid connections
+                    # if properties.start_connection[i].ry != Inf
+                    #     P_element_local[i][5] -= local_fixed_end_forces[index[j]][5]
+                    # else
+                        P_element_local[i][5] += local_fixed_end_forces[index[j]][5]
+                    # end
+
+                    # if properties.start_connection[i].rz != Inf
+                    #     P_element_local[i][6] -= local_fixed_end_forces[index[j]][6]
+                    # else
+                        P_element_local[i][6] += local_fixed_end_forces[index[j]][6]
+                    # end
+
+                    P_element_local[i][7] += local_fixed_end_forces[index[j]][7]
+                    P_element_local[i][8] += local_fixed_end_forces[index[j]][8]
+                    P_element_local[i][9] += local_fixed_end_forces[index[j]][9]
+                    P_element_local[i][10] += local_fixed_end_forces[index[j]][10]
+
+
+                    # if properties.end_connection[i].ry != Inf
+                    #     P_element_local[i][11] -= local_fixed_end_forces[index[j]][11]
+                    # else
+                        P_element_local[i][11] += local_fixed_end_forces[index[j]][11]
+                    # end
+
+                    # if properties.end_connection[i].rz != Inf
+                    #     P_element_local[i][12] -= local_fixed_end_forces[index[j]][12]
+                    # else
+                        P_element_local[i][12] += local_fixed_end_forces[index[j]][12]
+                    # end
 
                 end
 
@@ -751,35 +789,86 @@ function solve(node, cross_section, material, connection, element, support, unif
 end
 
 
-function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, L)
+function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, L, k1z, k2z, k1y, k2y, E, Iy, Iz)
 
     local_fixed_end_forces = zeros(Float64, 12)
 
+    # local_fixed_end_forces[1] = -wx_local*L/2
+    # local_fixed_end_forces[7] = -wx_local*L/2
+
+    # local_fixed_end_forces[2] = -wy_local*L/2
+    # local_fixed_end_forces[6] = -wy_local*L^2/12
+    # local_fixed_end_forces[8] = -wy_local*L/2
+    # local_fixed_end_forces[12] = +wy_local*L^2/12
+
+    # local_fixed_end_forces[3] = -wz_local*L/2
+    # local_fixed_end_forces[5] = +wz_local*L^2/12
+    # local_fixed_end_forces[9] = -wz_local*L/2
+    # local_fixed_end_forces[11] = -wz_local*L^2/12
+
+
+
     local_fixed_end_forces[1] = -wx_local*L/2
     local_fixed_end_forces[7] = -wx_local*L/2
-
-    # local_fixed_end_forces[3] = -wy_local*L/2
-    # local_fixed_end_forces[6] = -wy_local*L^2/12
-    # local_fixed_end_forces[9] = -wy_local*L/2
-    # local_fixed_end_forces[12] = wy_local*L^2/12
 
     local_fixed_end_forces[2] = -wy_local*L/2
     local_fixed_end_forces[6] = -wy_local*L^2/12
     local_fixed_end_forces[8] = -wy_local*L/2
     local_fixed_end_forces[12] = +wy_local*L^2/12
 
+    k1z, k2z = InstantFrame.connection_zeros_and_inf(k1z, k2z, E, Iz)
+
+    M_fixed = [local_fixed_end_forces[6], local_fixed_end_forces[12]]
+    F_fixed = [local_fixed_end_forces[2], local_fixed_end_forces[8]]
+    M_spring, F_spring = fixed_end_forces_partial_restraint(k1z, k2z, E, Iz, L, M_fixed, F_fixed)
+
+    local_fixed_end_forces[6] = M_spring[1]
+    local_fixed_end_forces[12] = M_spring[2]
+    local_fixed_end_forces[2] = F_spring[1]
+    local_fixed_end_forces[8] = F_spring[2]
+
     local_fixed_end_forces[3] = -wz_local*L/2
     local_fixed_end_forces[5] = +wz_local*L^2/12
     local_fixed_end_forces[9] = -wz_local*L/2
     local_fixed_end_forces[11] = -wz_local*L^2/12
 
+    k1y, k2y = InstantFrame.connection_zeros_and_inf(k1y, k2y, E, Iy)
 
-    # local_fixed_end_forces[3] = -wz_local*L/2
-    # local_fixed_end_forces[5] = -wz_local*L^2/12
-    # local_fixed_end_forces[9] = -wz_local*L/2
-    # local_fixed_end_forces[11] = +wz_local*L^2/12
+    M_fixed = [local_fixed_end_forces[5], local_fixed_end_forces[11]]
+    F_fixed = [local_fixed_end_forces[3], local_fixed_end_forces[9]]
+    M_spring, F_spring = fixed_end_forces_partial_restraint(k1y, k2y, E, Iy, L, M_fixed, F_fixed)
+
+    local_fixed_end_forces[5] = M_spring[1]
+    local_fixed_end_forces[11] = M_spring[2]
+    local_fixed_end_forces[3] = F_spring[1]
+    local_fixed_end_forces[9] = F_spring[2]
+
 
     return local_fixed_end_forces
+
+end
+
+
+function fixed_end_forces_partial_restraint(k1, k2, E, I, L, M_fixed, F_fixed)
+
+    α1 = k1/(E*I/L)
+    α2 = k2/(E*I/L)
+
+    #MGZ Example 13.7
+
+    k_moment = E*I/L*([4+α1  2.0
+            2.0  4+α2])
+
+    θi = k_moment^-1*M_fixed
+
+    M_spring = θi .* [k1, k2]
+
+    k_shear = (E*I/L)*[6/L  6/L
+            -6/L -6/L]
+
+    F_spring = F_fixed - k_shear * θi
+
+    return M_spring, F_spring
 
 end
 
@@ -806,32 +895,38 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
             wy_local = local_element_uniform_loads[2]
             wz_local = local_element_uniform_loads[3]
 
-            local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index])
+            k1z = element_properties.start_connection[elem_index].rz
+            k2z = element_properties.end_connection[elem_index].rz
+            k1y = element_properties.start_connection[elem_index].ry
+            k2y = element_properties.end_connection[elem_index].ry
+
+            # local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index])
+            local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index], k1z, k2z, k1y, k2y, element_properties.E[elem_index], element_properties.Iy[elem_index], element_properties.Iz[elem_index])
 
             #remove fixed end moments if there are moment end releases 
-            if element_properties.start_connection[elem_index].rx==0.0
-                local_fixed_end_forces[i][4] = 0.0
-            end
+            # if element_properties.start_connection[elem_index].rx==0.0
+            #     local_fixed_end_forces[i][4] = 0.0
+            # end
             
-            if element_properties.start_connection[elem_index].ry==0.0
-                local_fixed_end_forces[i][5] = 0.0
-            end
+            # if element_properties.start_connection[elem_index].ry==0.0
+            #     local_fixed_end_forces[i][5] = 0.0
+            # end
 
-            if element_properties.start_connection[elem_index].rz==0.0
-                local_fixed_end_forces[i][6] = 0.0
-            end
+            # if element_properties.start_connection[elem_index].rz==0.0
+            #     local_fixed_end_forces[i][6] = 0.0
+            # end
 
-            if element_properties.end_connection[elem_index].rx==0.0
-                local_fixed_end_forces[i][10] = 0.0
-            end
+            # if element_properties.end_connection[elem_index].rx==0.0
+            #     local_fixed_end_forces[i][10] = 0.0
+            # end
             
-            if element_properties.end_connection[elem_index].ry==0.0
-                local_fixed_end_forces[i][11] = 0.0
-            end
+            # if element_properties.end_connection[elem_index].ry==0.0
+            #     local_fixed_end_forces[i][11] = 0.0
+            # end
 
-            if element_properties.end_connection[elem_index].rz==0.0
-                local_fixed_end_forces[i][12] = 0.0
-            end
+            # if element_properties.end_connection[elem_index].rz==0.0
+            #     local_fixed_end_forces[i][12] = 0.0
+            # end
 
             global_fixed_end_forces = element_properties.Γ[elem_index]' * local_fixed_end_forces[i]
 
@@ -945,7 +1040,7 @@ function define_local_elastic_element_stiffness_matrix_partially_restrained(I, E
     
     α1 = k1/(E*I/L)  #start node
 
-    α2 = k2*(E*I/L)  #end node
+    α2 = k2/(E*I/L)  #end node
 
     # Kbb = E*I/L * [4+α1     2
     #                2        4+α2]
@@ -963,32 +1058,53 @@ function define_local_elastic_element_stiffness_matrix_partially_restrained(I, E
     
     # ke = Kcc - Kcb * Kbb^-1 * Kbc
 
-    α = (α1*α2)/(α1*α2 + 4*α1 + 4*α2 + 12)
 
-    ke = zeros(Float64, 4, 4)
+    # Kbb = E*I/L* [4 + α1      2
+    #     2        4+α2]
 
-    ke[1,1] = 12/L^2*(1 + (α1+α2)/(α1*α2))
-    ke[1,2] = 6/L * (1+2/α2)
-    ke[1,3] = -12/L^2*(1+(α1+α2)/(α1*α2))
-    ke[1,4] = 6/L*(1+2/α1)
-    ke[2,2] = 4*(1+3/α2)
-    ke[2,3] = -6/L*(1+2/α2)
-    ke[2,4] = 2
-    ke[3,3] = 12/L^2*(1+(α1+α2)/(α1*α2))
-    ke[3,4] = -6/L*(1+2/α1)
-    ke[4,4] = 4*(1+3/α1)
+    # Kbc = E*I/L * [6/L  -α1   -6/L   0.0
+    #     6/L   0    -6/L   -α2]
 
-    for i = 1:4
+    # Kcb = Kbc'
 
-        for j = 1:4
 
-            ke[j, i] = ke[i, j]
+    # Kcc = E*I/L * [12/L^2  0   -12/L^2  0
+    # 0     α1    0     0
+    # -12/L^2  0   12/L^2  0
+    # 0   0  0  α2 ]
 
+
+    # ke = Kcc - Kcb*Kbb^-1*Kbc
+
+
+
+
+        α = (α1*α2)/(α1*α2 + 4*α1 + 4*α2 + 12)
+
+        ke = zeros(Float64, 4, 4)
+
+        ke[1,1] = 12/L^2*(1 + (α1+α2)/(α1*α2))
+        ke[1,2] = 6/L * (1+2/α2)
+        ke[1,3] = -12/L^2*(1+(α1+α2)/(α1*α2))
+        ke[1,4] = 6/L*(1+2/α1)
+        ke[2,2] = 4*(1+3/α2)
+        ke[2,3] = -6/L*(1+2/α2)
+        ke[2,4] = 2
+        ke[3,3] = 12/L^2*(1+(α1+α2)/(α1*α2))
+        ke[3,4] = -6/L*(1+2/α1)
+        ke[4,4] = 4*(1+3/α1)
+
+        for i = 1:4
+
+            for j = 1:4
+
+                ke[j, i] = ke[i, j]
+
+            end
+            
         end
-        
-    end
 
-    ke = α * (E * I / L) .* ke
+        ke = α * (E * I / L) .* ke
 
     return ke
 
