@@ -2,16 +2,20 @@ module InstantFrame
 
 using SparseArrays, StaticArrays, LinearAlgebra, Rotations, Parameters, NonlinearSolve
 
-export Viz
-include("Viz.jl")
-using .Viz
+export Show
+include("Show.jl")
+using .Show
 
-export Tools
-include("Tools.jl")
-using .Tools
+export Report
+include("Report.jl")
+using .Report
+
+export Export
+include("Export.jl")
+using .Export
 
 
-@with_kw struct Material
+@with_kw mutable struct Material
 
     names::Array{String}
     E::Array{Float64}
@@ -20,7 +24,7 @@ using .Tools
 
 end
 
-@with_kw struct CrossSection
+@with_kw mutable struct CrossSection
 
     names::Array{String}
     A::Array{Float64}
@@ -37,7 +41,7 @@ end
 
 end
 
-@with_kw struct Node
+@with_kw mutable struct Node
 
     numbers::Array{Int64}
     coordinates::Array{Tuple{Float64, Float64, Float64}, 1}
@@ -62,7 +66,7 @@ end
 
 end
 
-@with_kw struct UniformLoad
+@with_kw mutable struct UniformLoad
 
     labels::Union{Array{String}, Nothing}
     elements::Union{Array{Int64}, Nothing}
@@ -70,9 +74,9 @@ end
 
 end
 
-UniformLoad(nothing) = UniformLoad(labels=nothing, elements=nothing, loads=nothing)
+UniformLoad(nothing) = UniformLoad(labels=nothing, elements=nothing, magnitudes=nothing)
 
-@with_kw struct PointLoad
+@with_kw mutable struct PointLoad
 
     labels::Union{Array{String}, Nothing}
     nodes::Union{Array{Int64}, Nothing}
@@ -80,7 +84,7 @@ UniformLoad(nothing) = UniformLoad(labels=nothing, elements=nothing, loads=nothi
 
 end
 
-PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, loads=nothing)
+PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, magnitudes=nothing)
 
 @with_kw struct ElementProperties
 
@@ -97,6 +101,7 @@ PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, loads=nothing)
 
     rotation_angles::Array{NamedTuple{(:Y, :Z, :X), NTuple{3, Float64}}}
     Γ::Array{Array{Float64, 2}}
+    local_axis_directions::Array{NamedTuple{(:x, :y, :z), Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}}}
     global_dof::Array{Array{Int64, 1}}
 
     start_connection::Array{NamedTuple{(:ux, :uy, :uz, :rx, :ry, :rz), NTuple{6, Float64}}}
@@ -398,6 +403,7 @@ function define_element_properties(node, cross_section, material, element, conne
     start_connection = Array{NamedTuple{(:ux, :uy, :uz, :rx, :ry, :rz), NTuple{6, Float64}}}(undef, num_elem)
     end_connection = Array{NamedTuple{(:ux, :uy, :uz, :rx, :ry, :rz), NTuple{6, Float64}}}(undef, num_elem)
     rotation_angles = Array{NamedTuple{(:Y, :Z, :X), NTuple{3, Float64}}}(undef, num_elem)
+    local_axis_directions = Array{NamedTuple{(:x, :y, :z), Tuple{Vector{Float64}, Vector{Float64}, Vector{Float64}}}}(undef, num_elem)
 
     for i in eachindex(element.numbers)
 
@@ -434,6 +440,9 @@ function define_element_properties(node, cross_section, material, element, conne
         #rotation matrix
         Γ[i], rotation_angles[i] = define_rotation_matrix(node_i, node_j, element.orientation[i])
 
+        #element local axis directions 
+        local_axis_directions[i] = calculate_element_local_axis_directions(Γ[i])
+
         #global dof for each element
         num_dof_per_node = 6 #hard code this for now
         node_i_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (node_i_index-1)
@@ -442,7 +451,7 @@ function define_element_properties(node, cross_section, material, element, conne
 
     end
 
-    element_properties = ElementProperties(L, A, Iz, Iy, Io, J, E, ν, G, ρ, rotation_angles, Γ, global_dof, start_connection, end_connection)
+    element_properties = ElementProperties(L, A, Iz, Iy, Io, J, E, ν, G, ρ, rotation_angles, Γ, local_axis_directions, global_dof, start_connection, end_connection)
 
     return element_properties
 
@@ -451,7 +460,6 @@ end
 
 function assemble_global_matrix(k, dof)
 
-    # total_dof = sum([Int(size(k[i], 1)/2) for i in eachindex(k)])
     total_dof = maximum([maximum(dof[i]) for i in eachindex(dof)])
 
     K = zeros(Float64, (total_dof , total_dof))
@@ -887,7 +895,7 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
             elem_num = uniform_load.elements[i]
             elem_index = findfirst(num->num==elem_num, element.numbers)
 
-            global_element_uniform_loads = [uniform_load.loads.qX[i], uniform_load.loads.qY[i], uniform_load.loads.qZ[i], uniform_load.loads.mX[i], uniform_load.loads.mY[i], uniform_load.loads.mZ[i]]
+            global_element_uniform_loads = [uniform_load.magnitudes.qX[i], uniform_load.magnitudes.qY[i], uniform_load.magnitudes.qZ[i], uniform_load.magnitudes.mX[i], uniform_load.magnitudes.mY[i], uniform_load.magnitudes.mZ[i]]
 
             local_element_uniform_loads = element_properties.Γ[elem_index][1:6, 1:6] * global_element_uniform_loads
 
@@ -1202,7 +1210,7 @@ function define_global_dof_point_loads(node, point_load)
 
     if !isnothing(point_load.nodes)
 
-        nodal_point_loads = reduce(hcat, collect(point_load.loads))
+        nodal_point_loads = reduce(hcat, collect(point_load.magnitudes))
 
         for i in eachindex(point_load.nodes)
 
@@ -1220,6 +1228,22 @@ function define_global_dof_point_loads(node, point_load)
 end
 
 
+function calculate_element_local_axis_directions(Γ)
+
+    unit_vector_X = [1.0, 0.0, 0.0]
+    local_x = Γ[1:3,1:3]' * unit_vector_X
+
+    unit_vector_Y = [0.0, 1.0, 0.0]
+    local_y = Γ[1:3,1:3]' * unit_vector_Y
+
+    unit_vector_Z = [0.0, 0.0, 1.0]
+    local_z = Γ[1:3,1:3]' * unit_vector_Z
+
+    element_local_axes = (x=local_x, y=local_y, z=local_z)
+
+    return  element_local_axes
+
+end
 
 function calculate_element_connection_deformations(properties, element, node, nodal_displacements, element_forces)
 

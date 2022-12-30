@@ -1,4 +1,4 @@
-module Viz
+module Show
 
 using GLMakie, InstantFrame, LinearAlgebra
 
@@ -260,7 +260,7 @@ function get_node_XYZ(node)
 
 end
 
-function show_elements!(ax, element_nodal_coords, color)
+function elements!(ax, element_nodal_coords, color)
 
     for i in eachindex(element_nodal_coords)
         lines!(ax, [element_nodal_coords[i].start_node[1], element_nodal_coords[i].end_node[1]], [element_nodal_coords[i].start_node[2], element_nodal_coords[i].end_node[2]], [element_nodal_coords[i].start_node[3], element_nodal_coords[i].end_node[3]], color = color)
@@ -269,14 +269,14 @@ function show_elements!(ax, element_nodal_coords, color)
 
 end
 
-function show_nodes!(ax, X, Y, Z, markersize, color)
+function nodes!(ax, X, Y, Z, markersize, color)
 
     scatter!(ax, X, Y, Z, markersize=markersize, color = color)
 
 end
 
 
-function show_point_loads!(ax, point_load, node, arrow_scale, arrow_head_scale, unit_arrow_head_size, arrowcolor, linecolor, linewidth)
+function point_loads!(ax, point_load, node, arrow_scale, arrow_head_scale, unit_arrow_head_size, arrowcolor, linecolor, linewidth)
 
     if !isnothing(point_load.nodes)
 
@@ -307,7 +307,7 @@ function show_point_loads!(ax, point_load, node, arrow_scale, arrow_head_scale, 
 end
 
 
-function show_uniform_loads!(ax, uniform_load, element, node, unit_arrow_head_size, arrow_head_scale, arrow_scale, linewidth, arrowcolor, linecolor)
+function uniform_loads!(ax, uniform_load, element, node, unit_arrow_head_size, arrow_head_scale, arrow_scale, linewidth, arrowcolor, linecolor)
 
     for i in eachindex(uniform_load.elements)
 
@@ -384,7 +384,7 @@ function define_load_arrow!(ax, unit_arrow_head_size, arrow_head_scale, unit_arr
 end
 
 
-function show_element_local_y_axis!(ax, element, node, model, unit_arrow_head_size, arrow_head_scale, arrow_scale, arrowcolor, linecolor, linewidth)
+function element_local_axes!(ax, element, node, model, unit_arrow_head_size, arrow_head_scale, arrow_scale, arrowcolor, linecolor, linewidth)
 
     for i in eachindex(element.numbers)
 
@@ -419,7 +419,7 @@ function show_element_local_y_axis!(ax, element, node, model, unit_arrow_head_si
 
 end
 
-function show_deformed_shape!(ax, nodal_displacements, global_dof, element, node, properties, element_connections, n, scale, linecolor)
+function deformed_shape!(ax, nodal_displacements, global_dof, element, node, properties, element_connections, n, scale, linecolor)
 
     u = Array{Float64}(undef, 0)
 
@@ -440,7 +440,7 @@ function show_deformed_shape!(ax, nodal_displacements, global_dof, element, node
 
 end
 
-function show_node_numbers!(ax, node, textsize, color)
+function node_numbers!(ax, node, fontsize, color)
 
     text!(ax,
         [Point3f(node.coordinates[i][1], node.coordinates[i][2], node.coordinates[i][3]) for i in eachindex(node.coordinates)],
@@ -448,13 +448,13 @@ function show_node_numbers!(ax, node, textsize, color)
         # rotation = [i / 7 * 1.5pi for i in 1:7],
         color = color,
         # align = (:left, :baseline),
-        textsize = textsize,
+        fontsize = fontsize,
         # markerspace = :data
     )
 
 end
 
-function show_element_numbers!(ax, element, node, textsize, color)
+function element_numbers!(ax, element, node, fontsize, color)
 
 
     text_location = Vector{Tuple{Float64, Float64, Float64}}(undef, size(element.numbers, 1))
@@ -475,7 +475,7 @@ function show_element_numbers!(ax, element, node, textsize, color)
         # rotation = [i / 7 * 1.5pi for i in 1:7],
         color = color,
         # align = (:left, :baseline),
-        textsize = textsize,
+        fontsize = fontsize,
         # markerspace = :data
     )
   
