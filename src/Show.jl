@@ -314,9 +314,9 @@ function uniform_loads!(ax, uniform_load, element, node, unit_arrow_head_size, a
         index = findfirst(num->num==uniform_load.elements[i], element.numbers)
         element_nodes = element.nodes[index]
 
-        qX = uniform_load.loads.qX[i] 
-        qY = uniform_load.loads.qY[i] 
-        qZ = uniform_load.loads.qZ[i] 
+        qX = uniform_load.magnitudes.qX[i] 
+        qY = uniform_load.magnitudes.qY[i] 
+        qZ = uniform_load.magnitudes.qZ[i] 
 
         #start node
 

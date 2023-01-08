@@ -634,6 +634,10 @@ function first_order_analysis(node, cross_section, material, connection, element
     #add uniform load equivalent nodal forces to rigid support reactions  
     reactions[fixed_global_dof] += -forces.global_dof_nodal_forces_uniform_load[fixed_global_dof]
 
+    # reactions[fixed_global_dof] -= -forces.global_dof_nodal_forces_uniform_load[fixed_global_dof]
+
+    # reactions[fixed_global_dof] = reactions[fixed_global_dof] - 
+
     #package up reactions at each node, these are reactions from elastic supports and rigid supports
     nodal_reactions = Array{Array{Float64, 1}}(undef, length(support.nodes))
 
@@ -797,24 +801,80 @@ function solve(node, cross_section, material, connection, element, support, unif
 end
 
 
-function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, L, k1z, k2z, k1y, k2y, E, Iy, Iz)
+function calculate_local_element_fixed_end_forces_partial_restraint(wx_local, wy_local, wz_local, L, k1z, k2z, k1y, k2y, E, Iy, Iz)
+
+    local_fixed_end_forces = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, L)
+
+    k1z, k2z = InstantFrame.connection_zeros_and_inf(k1z, k2z, E, Iz)
+
+    M_fixed = [local_fixed_end_forces[6], local_fixed_end_forces[12]]
+    F_fixed = [local_fixed_end_forces[2], local_fixed_end_forces[8]]
+    M_spring, F_spring = fixed_end_forces_partial_restraint(k1z, k2z, E, Iz, L, M_fixed, F_fixed)
+
+    local_fixed_end_forces[6] = M_spring[1]
+    local_fixed_end_forces[12] = -M_spring[2]
+    local_fixed_end_forces[2] = F_spring[2] #tricky here
+    local_fixed_end_forces[8] = F_spring[1] #tricky here
+  
+    k1y, k2y = InstantFrame.connection_zeros_and_inf(k1y, k2y, E, Iy)
+
+    M_fixed = [local_fixed_end_forces[5], local_fixed_end_forces[11]]
+    F_fixed = [local_fixed_end_forces[3], local_fixed_end_forces[9]]
+    M_spring, F_spring = fixed_end_forces_partial_restraint(k1y, k2y, E, Iy, L, M_fixed, F_fixed)
+
+    local_fixed_end_forces[3] = F_spring[1]
+    local_fixed_end_forces[5] = -M_spring[1]
+    local_fixed_end_forces[9] = F_spring[2]
+    local_fixed_end_forces[11] = M_spring[2]
+   
+    return local_fixed_end_forces
+
+end
+
+
+
+function calculate_local_element_fixed_end_forces_partial_restraint_xy(local_fixed_end_forces, L, k1z, k2z, E, Iz)
+
+    k1z, k2z = InstantFrame.connection_zeros_and_inf(k1z, k2z, E, Iz)
+
+    M_fixed = [local_fixed_end_forces[6], local_fixed_end_forces[12]]
+    F_fixed = [local_fixed_end_forces[2], local_fixed_end_forces[8]]
+    M_spring, F_spring = fixed_end_forces_partial_restraint(k1z, k2z, E, Iz, L, M_fixed, F_fixed)
+
+    local_fixed_end_forces[6] = M_spring[1]
+    local_fixed_end_forces[12] = -M_spring[2]
+    local_fixed_end_forces[2] = F_spring[2] #tricky here
+    local_fixed_end_forces[8] = F_spring[1] #tricky here
+  
+    return local_fixed_end_forces
+
+end
+
+
+
+
+function calculate_local_element_fixed_end_forces_partial_restraint_xz(local_fixed_end_forces, L, k1y, k2y, E, Iy)
+  
+    k1y, k2y = InstantFrame.connection_zeros_and_inf(k1y, k2y, E, Iy)
+
+    M_fixed = [local_fixed_end_forces[5], local_fixed_end_forces[11]]
+    F_fixed = [local_fixed_end_forces[3], local_fixed_end_forces[9]]
+    M_spring, F_spring = fixed_end_forces_partial_restraint(k1y, k2y, E, Iy, L, M_fixed, F_fixed)
+
+    local_fixed_end_forces[3] = F_spring[1]
+    local_fixed_end_forces[5] = -M_spring[1]
+    local_fixed_end_forces[9] = F_spring[2]
+    local_fixed_end_forces[11] = M_spring[2]
+   
+    return local_fixed_end_forces
+
+end
+
+
+function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, L)
+
 
     local_fixed_end_forces = zeros(Float64, 12)
-
-    # local_fixed_end_forces[1] = -wx_local*L/2
-    # local_fixed_end_forces[7] = -wx_local*L/2
-
-    # local_fixed_end_forces[2] = -wy_local*L/2
-    # local_fixed_end_forces[6] = -wy_local*L^2/12
-    # local_fixed_end_forces[8] = -wy_local*L/2
-    # local_fixed_end_forces[12] = +wy_local*L^2/12
-
-    # local_fixed_end_forces[3] = -wz_local*L/2
-    # local_fixed_end_forces[5] = +wz_local*L^2/12
-    # local_fixed_end_forces[9] = -wz_local*L/2
-    # local_fixed_end_forces[11] = -wz_local*L^2/12
-
-
 
     local_fixed_end_forces[1] = -wx_local*L/2
     local_fixed_end_forces[7] = -wx_local*L/2
@@ -824,37 +884,17 @@ function calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, 
     local_fixed_end_forces[8] = -wy_local*L/2
     local_fixed_end_forces[12] = +wy_local*L^2/12
 
-    k1z, k2z = InstantFrame.connection_zeros_and_inf(k1z, k2z, E, Iz)
-
-    M_fixed = [local_fixed_end_forces[6], local_fixed_end_forces[12]]
-    F_fixed = [local_fixed_end_forces[2], local_fixed_end_forces[8]]
-    M_spring, F_spring = fixed_end_forces_partial_restraint(k1z, k2z, E, Iz, L, M_fixed, F_fixed)
-
-    local_fixed_end_forces[6] = M_spring[1]
-    local_fixed_end_forces[12] = M_spring[2]
-    local_fixed_end_forces[2] = F_spring[1]
-    local_fixed_end_forces[8] = F_spring[2]
 
     local_fixed_end_forces[3] = -wz_local*L/2
     local_fixed_end_forces[5] = +wz_local*L^2/12
     local_fixed_end_forces[9] = -wz_local*L/2
     local_fixed_end_forces[11] = -wz_local*L^2/12
 
-    k1y, k2y = InstantFrame.connection_zeros_and_inf(k1y, k2y, E, Iy)
-
-    M_fixed = [local_fixed_end_forces[5], local_fixed_end_forces[11]]
-    F_fixed = [local_fixed_end_forces[3], local_fixed_end_forces[9]]
-    M_spring, F_spring = fixed_end_forces_partial_restraint(k1y, k2y, E, Iy, L, M_fixed, F_fixed)
-
-    local_fixed_end_forces[5] = M_spring[1]
-    local_fixed_end_forces[11] = M_spring[2]
-    local_fixed_end_forces[3] = F_spring[1]
-    local_fixed_end_forces[9] = F_spring[2]
-
-
     return local_fixed_end_forces
 
 end
+
+
 
 
 function fixed_end_forces_partial_restraint(k1, k2, E, I, L, M_fixed, F_fixed)
@@ -869,12 +909,16 @@ function fixed_end_forces_partial_restraint(k1, k2, E, I, L, M_fixed, F_fixed)
 
     θi = k_moment^-1*M_fixed
 
-    M_spring = θi .* [k1, k2]
+    # M_spring = θi .* [k1, k2]
+
+    M_spring = abs.(θi) .* [k1, k2]
 
     k_shear = (E*I/L)*[6/L  6/L
             -6/L -6/L]
 
-    F_spring = F_fixed - k_shear * θi
+    # F_spring = F_fixed - k_shear * θi
+    F_spring = F_fixed + k_shear * θi
+
 
     return M_spring, F_spring
 
@@ -908,33 +952,18 @@ function calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, 
             k1y = element_properties.start_connection[elem_index].ry
             k2y = element_properties.end_connection[elem_index].ry
 
-            # local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index])
-            local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index], k1z, k2z, k1y, k2y, element_properties.E[elem_index], element_properties.Iy[elem_index], element_properties.Iz[elem_index])
+            local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces(wx_local, wy_local, wz_local, element_properties.L[elem_index])
 
-            #remove fixed end moments if there are moment end releases 
-            # if element_properties.start_connection[elem_index].rx==0.0
-            #     local_fixed_end_forces[i][4] = 0.0
-            # end
-            
-            # if element_properties.start_connection[elem_index].ry==0.0
-            #     local_fixed_end_forces[i][5] = 0.0
-            # end
+            #now modify fixed end forces if there are partial end restraints 
+            # partial_restraint_index = findall(x->x!=Inf, [k1z, k2z])
+            if (k1z < Inf) | (k2z < Inf)
+                local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces_partial_restraint_xy(local_fixed_end_forces[i], element_properties.L[elem_index], k1z, k2z, element_properties.E[elem_index], element_properties.Iz[elem_index])
+            end
 
-            # if element_properties.start_connection[elem_index].rz==0.0
-            #     local_fixed_end_forces[i][6] = 0.0
-            # end
-
-            # if element_properties.end_connection[elem_index].rx==0.0
-            #     local_fixed_end_forces[i][10] = 0.0
-            # end
-            
-            # if element_properties.end_connection[elem_index].ry==0.0
-            #     local_fixed_end_forces[i][11] = 0.0
-            # end
-
-            # if element_properties.end_connection[elem_index].rz==0.0
-            #     local_fixed_end_forces[i][12] = 0.0
-            # end
+            # partial_restraint_index = findall(x->x!=Inf, [k1y, k2y])
+            if (k1y < Inf) | (k2y < Inf)
+                local_fixed_end_forces[i] = calculate_local_element_fixed_end_forces_partial_restraint_xz(local_fixed_end_forces[i], element_properties.L[elem_index], k1y, k2y, element_properties.E[elem_index], element_properties.Iy[elem_index])
+            end
 
             global_fixed_end_forces = element_properties.Γ[elem_index]' * local_fixed_end_forces[i]
 
@@ -986,19 +1015,50 @@ function modify_element_local_connection_stiffness(element_properties, ke_local,
     
                 ke_local_xy = InstantFrame.define_local_elastic_element_stiffness_matrix_partially_restrained(element_properties.Iz[index], element_properties.E[index], element_properties.L[index], element_properties.start_connection[index][6], element_properties.end_connection[index][6])
                 ke_local_xz = InstantFrame.define_local_elastic_element_stiffness_matrix_partially_restrained(element_properties.Iy[index], element_properties.E[index], element_properties.L[index], element_properties.start_connection[index][5], element_properties.end_connection[index][5])
-    
+
+                #signs are opposite in xz plane for these terms
+                ke_local_xz[1, 2] = -ke_local_xz[1, 2]
+                ke_local_xz[1, 4] = -ke_local_xz[1, 4]
+                ke_local_xz[2, 1] = -ke_local_xz[2, 1]
+                ke_local_xz[2, 3] = -ke_local_xz[2, 3]
+                ke_local_xz[3, 2] = -ke_local_xz[3, 2]
+                ke_local_xz[3, 4] = -ke_local_xz[3, 4]
+                ke_local_xz[4, 1] = -ke_local_xz[4, 1]
+                ke_local_xz[4, 3] = -ke_local_xz[4, 3]
+
                 ke_local_torsion = define_local_elastic_element_torsional_stiffness_matrix_partially_restrained(element_properties.J[index], element_properties.G[index], element_properties.L[index], element_properties.start_connection[index][4], element_properties.end_connection[index][4])
 
                 #flexural dof
                 dof = [2, 6, 8, 12]
-                ke_local[index][dof, dof] .= ke_local_xy
-    
+
+                for i in eachindex(dof)
+                    for j in eachindex(dof)
+                        ke_local[index][dof[i], dof[j]] = ke_local_xy[i,j]
+                    end
+                end
+
                 dof = [3, 5, 9, 11]
-                ke_local[index][dof, dof] .= ke_local_xz
+
+                for i in eachindex(dof)
+                    for j in eachindex(dof)
+
+                        ke_local[index][dof[i], dof[j]] = ke_local_xz[i,j]
+                    end
+                end
+
+               
+                # ke_local[index][dof, dof] .= ke_local_xz
 
                 #torsion dof
                 dof = [4, 10]
-                ke_local[index][dof, dof] .= ke_local_torsion
+                for i in eachindex(dof)
+                    for j in eachindex(dof)
+                        ke_local[index][dof[i], dof[j]] = ke_local_torsion[i,j]
+                    end
+                end
+
+
+                # ke_local[index][dof, dof] .= ke_local_torsion
                 
         end
     

@@ -67,14 +67,14 @@ I = 0.627
 E = 29000000.0
 L = 96.0
 k1 = 230000.0
-k2 = 2000.0
+k2 = 230000.0
 
 
 
 M_fixed = [9600.0, -9600.0]
 F_fixed = [600.0, 600.0]      
 
-function fixed_end_forces_partial_restraint(k1, k2, E, I, L, M_fixed, F_fixed)
+# function fixed_end_forces_partial_restraint(k1, k2, E, I, L, M_fixed, F_fixed)
 
     α1 = k1/(E*I/L)
     α2 = k2/(E*I/L)
@@ -93,9 +93,9 @@ function fixed_end_forces_partial_restraint(k1, k2, E, I, L, M_fixed, F_fixed)
 
     F_spring = F_fixed - k_shear * θi
 
-    return M_spring, F_spring
+#     return M_spring, F_spring
 
-end
+# end
 
 
 wx_local = 0.0
