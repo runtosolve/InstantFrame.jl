@@ -16,11 +16,12 @@ element = InstantFrame.Element(numbers=[1], nodes=[(1,2)], orientation=[0.0], co
 
 support = InstantFrame.Support(nodes=[1, 2], stiffness=(uX=[Inf,0.0], uY=[Inf,Inf], uZ=[Inf,0.0], rX=[Inf,Inf], rY=[Inf,0.0], rZ=[Inf,Inf]))
 
-uniform_load = InstantFrame.UniformLoad(labels=["test"], elements=[1], loads=(qX=[0.0, 0.0], qY=[0.0, 0.0], qZ=[0.0, 0.0], mX=[0.0,0.0], mY=[0.0,0.0], mZ=[0.0,0.0]))
+uniform_load = InstantFrame.UniformLoad(labels=["test"], elements=[1], magnitudes=(qX=[0.0, 0.0], qY=[0.0, 0.0], qZ=[0.0, 0.0], mX=[0.0,0.0], mY=[0.0,0.0], mZ=[0.0,0.0]))
 
-point_load = InstantFrame.PointLoad(labels = ["test"], nodes=[2], loads=(FX=[-50.0], FY=[0.0], FZ=[1.0], MX=[0.0], MY=[0.0], MZ=[0.0]))
+point_load = InstantFrame.PointLoad(labels = ["test"], nodes=[2], magnitudes=(FX=[-50.0], FY=[0.0], FZ=[1.0], MX=[0.0], MY=[0.0], MZ=[0.0]))
 
-model = InstantFrame.solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type = "first order")
+analysis_type = "first order"
+model = InstantFrame.solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type)
 
 
 ##tests

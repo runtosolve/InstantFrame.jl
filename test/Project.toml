@@ -1,4 +1,8 @@
 [deps]
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 InstantFrame = "d4c411e5-b967-4c36-b61c-e426871b3c50"
+LineSearches = "d3d80556-e9d4-5f37-9878-2ab0fcc64255"
+NLsolve = "2774e3e8-f4cf-5e23-947b-6d7e65073b56"
+NonlinearSolve = "8913a72c-1f9b-4ce2-8d82-65094dcecaec"
 Rotations = "6038ab10-8711-5258-84ad-4b1120ba62dc"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"

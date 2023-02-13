@@ -16,20 +16,21 @@ element = InstantFrame.Element(numbers=[1], nodes=[(1,2)], orientation=[0.0], co
 
 support = InstantFrame.Support(nodes=[1, 2], stiffness=(uX=[Inf,0.0], uY=[Inf,0.0], uZ=[Inf,0.0], rX=[Inf,Inf], rY=[Inf,0.0], rZ=[Inf,0.0]))
 
-uniform_load = InstantFrame.UniformLoad(labels=["test"], elements=[1], loads=(qX=[0.0, 0.0], qY=[0.0, 0.0], qZ=[0.0, 0.0], mX=[0.0,0.0], mY=[0.0,0.0], mZ=[0.0,0.0]))
+uniform_load = InstantFrame.UniformLoad(labels=["test"], elements=[1], magnitudes=(qX=[0.0, 0.0], qY=[0.0, 0.0], qZ=[0.0, 0.0], mX=[0.0,0.0], mY=[0.0,0.0], mZ=[0.0,0.0]))
 
-point_load = InstantFrame.PointLoad(labels = ["test"], nodes=[2], loads=(FX=[-50.0], FY=[1.0], FZ=[0.0], MX=[0.0], MY=[0.0], MZ=[0.0]))
+point_load = InstantFrame.PointLoad(labels = ["test"], nodes=[2], magnitudes=(FX=[-50.0], FY=[1.0], FZ=[0.0], MX=[0.0], MY=[0.0], MZ=[0.0]))
 
-model = InstantFrame.solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type = "second order")
+
+model = InstantFrame.solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type = "second order", solution_tolerance = 1e-9)
 
 
 ##tests
 
 #deflection
-isapprox(model.solution.nodal_displacements[2][2], 0.765, rtol=0.05)
+isapprox(model.solution.displacements[2][2], 0.765, rtol=0.05)
 
 #cantilever moment 
-isapprox(-model.solution.element_forces[1][6], 218.3, rtol=0.05)
+isapprox(-model.solution.forces[1][6], 218.3, rtol=0.05)
 
 # scale = (1.0, 1.0, 1.0)
 # figure = InstantFrame.UI.display_model_deformed_shape(model.solution.u1, element, node, model.properties, scale)

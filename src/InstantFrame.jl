@@ -86,7 +86,7 @@ end
 
 PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, magnitudes=nothing)
 
-@with_kw struct ElementProperties
+@with_kw mutable struct ElementProperties
 
     L::Array{Float64}
     A::Array{Float64}
@@ -137,6 +137,8 @@ end
 @with_kw struct SecondOrderEquations
   
     free_dof::Array{Int64}
+    fixed_dof::Array{Int64}
+    elastic_supports::ElasticSupport
     ke_local::Array{Array{Float64, 2}}
     ke_global::Array{Array{Float64, 2}}
     Ke::Array{Float64, 2}
@@ -145,6 +147,7 @@ end
     Kg::Array{Float64, 2}
   
 end
+
 
 @with_kw struct ModalEquations
   
@@ -562,6 +565,7 @@ end
 function define_nodal_displacements(node, u)
 
     nodal_displacements = Array{Array{Float64, 1}}(undef, length(node.numbers))
+    # nodal_displacements = Vector{Vector{Float64, 1}}(undef, length(node.numbers))
 
     num_dof_per_node = 6 #hard code this for now
     for i in eachindex(node.numbers)
@@ -669,11 +673,9 @@ function first_order_analysis(node, cross_section, material, connection, element
 end
 
 
-function second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load)
+function second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, solution_tolerance)
 
     element_properties = InstantFrame.define_element_properties(node, cross_section, material, element, connection)
-
-    free_global_dof = InstantFrame.define_free_global_dof(node, support)
 
     ke_local = [InstantFrame.define_local_elastic_stiffness_matrix(element_properties.Iy[i], element_properties.Iz[i], element_properties.A[i], element_properties.J[i], element_properties.E[i], element_properties.ν[i], element_properties.L[i]) for i in eachindex(element_properties.L)]
 
@@ -683,6 +685,14 @@ function second_order_analysis(node, cross_section, material, connection, elemen
 
     Ke = InstantFrame.assemble_global_matrix(ke_global, element_properties.global_dof)
 
+    free_global_dof, fixed_global_dof, elastic_supports = InstantFrame.define_free_global_dof(node, support)
+
+    for i in eachindex(elastic_supports.global_dof)  #add springs 
+
+        Ke[elastic_supports.global_dof[i], elastic_supports.global_dof[i]] += elastic_supports.global_stiffness[i]
+
+    end
+
     equiv_global_nodal_forces_uniform_load, local_fixed_end_forces, global_dof_nodal_forces_uniform_load = InstantFrame.calculate_nodal_forces_from_uniform_loads(uniform_load, element, node, element_properties)
 
     global_dof_point_loads = InstantFrame.define_global_dof_point_loads(node, point_load)
@@ -691,6 +701,7 @@ function second_order_analysis(node, cross_section, material, connection, elemen
 
     forces = InstantFrame.Forces(equiv_global_nodal_forces_uniform_load, local_fixed_end_forces, global_dof_nodal_forces_uniform_load, global_dof_point_loads, F)
 
+
     Ff = F[free_global_dof]
     Ke_ff = Ke[free_global_dof, free_global_dof]
     u1f = Ke_ff \ Ff
@@ -698,7 +709,10 @@ function second_order_analysis(node, cross_section, material, connection, elemen
     u1 = zeros(Float64, size(Ke,1))
     u1[free_global_dof] = u1f
 
-    P1 = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u1)
+    # P1 = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u1)
+    
+    #calculate element internal forces
+    P1 = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, element, uniform_load, local_fixed_end_forces, u1)
     P1_axial = [P1[i][7] for i in eachindex(P1)]
     kg_local = [InstantFrame.define_local_geometric_stiffness_matrix(P1_axial[i], element_properties.L[i]) for i in eachindex(element_properties.L)]
     kg_global = [element_properties.Γ[i]'*kg_local[i]*element_properties.Γ[i] for i in eachindex(element_properties.L)]
@@ -710,24 +724,55 @@ function second_order_analysis(node, cross_section, material, connection, elemen
     p = [Kff, Ff]
     u1f = SVector{length(u1f)}(u1f)
     probN = NonlinearSolve.NonlinearProblem{false}(residual, u1f, p)
-    u2f = NonlinearSolve.solve(probN, NewtonRaphson(), tol = 1e-9)
+    u2f = NonlinearSolve.solve(probN, NewtonRaphson(), reltol = solution_tolerance)
 
     u2 = zeros(Float64, size(Ke,1))
     u2[free_global_dof] = u2f
-    # P2 = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u2)
-
 
     nodal_displacements = define_nodal_displacements(node, u2)
 
+    #### calculate reaction ####
+    reactions = zeros(Float64, length(node.numbers)*6)
+
+    #get reactions from rigid supports
+    Ke_sf = Ke[fixed_global_dof, free_global_dof]
+    R = Ke_sf * u2f
+    reactions[fixed_global_dof] = R
+
+    #get reactions from elastic supports
+    elastic_support_reactions = -u2[elastic_supports.global_dof] .* elastic_supports.global_stiffness
+    reactions[elastic_supports.global_dof] = elastic_support_reactions
+
+    #add point loads to rigid support reactions 
+    reactions[fixed_global_dof] += -forces.global_dof_point_loads[fixed_global_dof]
+
+    #add uniform load equivalent nodal forces to rigid support reactions  
+    reactions[fixed_global_dof] += -forces.global_dof_nodal_forces_uniform_load[fixed_global_dof]
+
+    #package up reactions at each node, these are reactions from elastic supports and rigid supports
+    nodal_reactions = Array{Array{Float64, 1}}(undef, length(support.nodes))
+
+    num_dof_per_node = 6 #hard code this for now
+    for i in eachindex(support.nodes)
+
+        nodal_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (support.nodes[i]-1)
+        nodal_reactions[i] = reactions[nodal_dof]
+
+    end
+
+    ######
+
     #calculate element internal forces
-    element_forces = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, u2)
+    element_forces = InstantFrame.calculate_element_internal_forces(element_properties, ke_local, element, uniform_load, local_fixed_end_forces, u2)
 
     #calculate connection deformations
     element_connections = calculate_element_connection_deformations(element_properties, element, node, nodal_displacements, element_forces)
 
-    equations = SecondOrderEquations(free_global_dof, ke_local, ke_global, Ke, kg_local, kg_global, Kg)
 
-    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections)
+ 
+    equations = SecondOrderEquations(free_global_dof, fixed_global_dof, elastic_supports, ke_local, ke_global, Ke, kg_local, kg_global, Kg)
+
+    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections, nodal_reactions, u2, u2f)
 
     model = Model(element_properties, forces, equations, solution)
 
@@ -782,15 +827,11 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
 end
 
 
-function solve(node, cross_section, material, connection, element, support, uniform_load, point_load; analysis_type)
+function solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type)
 
     if analysis_type == "first order"
 
         first_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load)
-
-    elseif analysis_type == "second order"
-
-        second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load)
 
     elseif analysis_type == "modal vibration"
 
@@ -799,6 +840,17 @@ function solve(node, cross_section, material, connection, element, support, unif
     end
 
 end
+
+function solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type, solution_tolerance)
+
+    if analysis_type == "second order"
+
+        second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, solution_tolerance)
+
+    end
+
+end
+
 
 
 function calculate_local_element_fixed_end_forces_partial_restraint(wx_local, wy_local, wz_local, L, k1z, k2z, k1y, k2y, E, Iy, Iz)
@@ -1002,6 +1054,24 @@ function define_local_elastic_element_torsional_stiffness_matrix_partially_restr
 
 end
 
+function define_local_elastic_element_axial_stiffness_matrix_partially_restrained(A, E, L, k1, k2)
+
+    k1, k2 = connection_zeros_and_inf(k1, k2, E, A)
+
+    α1 = k1/(A*E/L)
+    α2 = k2/(A*E/L)
+
+    α = 1 + 1/α1 + 1/α2
+
+    ka = A*E/L * [1/α -1/α
+                  -1/α 1/α]
+
+    return ka
+
+end
+
+
+
 function modify_element_local_connection_stiffness(element_properties, ke_local, element)
 
     for i in eachindex(ke_local)
@@ -1027,6 +1097,8 @@ function modify_element_local_connection_stiffness(element_properties, ke_local,
                 ke_local_xz[4, 3] = -ke_local_xz[4, 3]
 
                 ke_local_torsion = define_local_elastic_element_torsional_stiffness_matrix_partially_restrained(element_properties.J[index], element_properties.G[index], element_properties.L[index], element_properties.start_connection[index][4], element_properties.end_connection[index][4])
+
+                ke_local_axial = define_local_elastic_element_axial_stiffness_matrix_partially_restrained(element_properties.A[index], element_properties.E[index], element_properties.L[index], element_properties.start_connection[index][1], element_properties.end_connection[index][1])
 
                 #flexural dof
                 dof = [2, 6, 8, 12]
@@ -1054,6 +1126,13 @@ function modify_element_local_connection_stiffness(element_properties, ke_local,
                 for i in eachindex(dof)
                     for j in eachindex(dof)
                         ke_local[index][dof[i], dof[j]] = ke_local_torsion[i,j]
+                    end
+                end
+
+                dof = [1, 7]
+                for i in eachindex(dof)
+                    for j in eachindex(dof)
+                        ke_local[index][dof[i], dof[j]] = ke_local_axial[i,j]
                     end
                 end
 
@@ -1092,87 +1171,38 @@ function define_local_elastic_element_stiffness_matrix_partially_restrained(I, E
 
     #from McGuire et al. (2000) Example 13.6
 
-    # if k1 == Inf  #need big number instead of Inf because 0.0*Inf = NaN
-    #     k1 = E*I*10.0^10
-    # elseif k1 == 0.0
-    #     k1 = E*I*10.0^-20
-    # end
-
-    # if k2 == Inf #need big number instead of Inf
-    #     k2 = E*I*10.0^10
-    # elseif k2 == 0.0
-    #     k2 = E*I*10.0^-10
-    # end
-
     k1, k2 = connection_zeros_and_inf(k1, k2, E, I)
     
     α1 = k1/(E*I/L)  #start node
 
     α2 = k2/(E*I/L)  #end node
 
-    # Kbb = E*I/L * [4+α1     2
-    #                2        4+α2]
+    α = (α1*α2)/(α1*α2 + 4*α1 + 4*α2 + 12)
 
-    # Kbc = E*I/L *[6/L   -α1     -6/L    0.0
-    #               6/L   0.0     -6/L    -α2]
+    ke = zeros(Float64, 4, 4)
 
-    # Kcb = Kbc'
+    ke[1,1] = 12/L^2*(1 + (α1+α2)/(α1*α2))
+    ke[1,2] = 6/L * (1+2/α2)
+    ke[1,3] = -12/L^2*(1+(α1+α2)/(α1*α2))
+    ke[1,4] = 6/L*(1+2/α1)
+    ke[2,2] = 4*(1+3/α2)
+    ke[2,3] = -6/L*(1+2/α2)
+    ke[2,4] = 2
+    ke[3,3] = 12/L^2*(1+(α1+α2)/(α1*α2))
+    ke[3,4] = -6/L*(1+2/α1)
+    ke[4,4] = 4*(1+3/α1)
 
-    # Kcc = E*I/L * [12/L^2   0.0     -12/L^2     0.0
-    #                0.0      α1      0.0         0.0
-    #                -12/L^2  0.0     12/L^2      0.0
-    #                0.0      0.0     0.0         α2]
+    for i = 1:4
 
-    
-    # ke = Kcc - Kcb * Kbb^-1 * Kbc
+        for j = 1:4
 
+            ke[j, i] = ke[i, j]
 
-    # Kbb = E*I/L* [4 + α1      2
-    #     2        4+α2]
-
-    # Kbc = E*I/L * [6/L  -α1   -6/L   0.0
-    #     6/L   0    -6/L   -α2]
-
-    # Kcb = Kbc'
-
-
-    # Kcc = E*I/L * [12/L^2  0   -12/L^2  0
-    # 0     α1    0     0
-    # -12/L^2  0   12/L^2  0
-    # 0   0  0  α2 ]
-
-
-    # ke = Kcc - Kcb*Kbb^-1*Kbc
-
-
-
-
-        α = (α1*α2)/(α1*α2 + 4*α1 + 4*α2 + 12)
-
-        ke = zeros(Float64, 4, 4)
-
-        ke[1,1] = 12/L^2*(1 + (α1+α2)/(α1*α2))
-        ke[1,2] = 6/L * (1+2/α2)
-        ke[1,3] = -12/L^2*(1+(α1+α2)/(α1*α2))
-        ke[1,4] = 6/L*(1+2/α1)
-        ke[2,2] = 4*(1+3/α2)
-        ke[2,3] = -6/L*(1+2/α2)
-        ke[2,4] = 2
-        ke[3,3] = 12/L^2*(1+(α1+α2)/(α1*α2))
-        ke[3,4] = -6/L*(1+2/α1)
-        ke[4,4] = 4*(1+3/α1)
-
-        for i = 1:4
-
-            for j = 1:4
-
-                ke[j, i] = ke[i, j]
-
-            end
-            
         end
+        
+    end
 
-        ke = α * (E * I / L) .* ke
+    ke = α * (E * I / L) .* ke
 
     return ke
 
@@ -1325,6 +1355,7 @@ function calculate_element_connection_deformations(properties, element, node, no
                 push!(elements_with_connections, element.numbers[i])
 
                 E = properties.E[index]
+                A = properties.A[index]
                 I = properties.Iz[index]
                 L = properties.L[index]
                 G = properties.G[index]
@@ -1379,6 +1410,17 @@ function calculate_element_connection_deformations(properties, element, node, no
                 u_connection_local[4] = θij[1]
                 u_connection_local[10] = θij[2]
 
+                #axial
+                k1 = properties.start_connection[index][1]
+                k2 = properties.end_connection[index][1]
+                k1, k2 = connection_zeros_and_inf(k1, k2, E, A)
+                Δx1 = u_local_element[1]
+                Δx2 = u_local_element[7]
+                Pi = element_forces[index][1]
+                Pj = element_forces[index][7]
+                Δij = calculate_connection_deformation_axial(k1, k2, E, A, L, Δx1, Δx2, Pi, Pj)  
+                u_connection_local[1] = Δij[1]
+                u_connection_local[7] = Δij[2]
 
                 u_connection_global = properties.Γ[index]' * u_connection_local  #convert from local to global
 
@@ -1441,6 +1483,29 @@ function calculate_connection_rotation_torsion(k1, k2, G, J, L, θ1, θ2, Ti, Tj
     return θ
 
 end
+
+
+function calculate_connection_deformation_axial(k1, k2, E, A, L, Δ1, Δ2, Pi, Pj)
+
+    α1 = k1/(E*A/L)
+    α2 = k2/(E*A/L)
+
+    kB = (E*A/L)*[(1-α1)/2  -1/2
+                -1/2   (1-α2)/2]
+
+    kC = (E*A/L)*[α1/2  0
+                  0    α2/2]
+
+    u = [Δ1, Δ2]
+
+    P = [Pi, Pj]
+
+    Δ = kB^-1*(P - kC*u)
+
+    return Δ
+
+end
+
 
 
 end # module
