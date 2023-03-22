@@ -161,9 +161,6 @@ function update_Ke(node, element, properties, ke_local, u)
         #rotation matrix
         Γ[i], rotation_angles[i] = InstantFrame.define_rotation_matrix(node_i, node_j, element.orientation[i])
 
-        print(rotation_angles[i].X)
-   
-
     end
 
     print("              ")

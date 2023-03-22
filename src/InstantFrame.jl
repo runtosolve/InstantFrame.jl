@@ -50,6 +50,7 @@ end
 
 @with_kw mutable struct Element
 
+    types::Array{String}
     numbers::Array{Int64}
     nodes::Array{Tuple{Int64, Int64}}
     orientation::Array{Float64}
@@ -209,9 +210,26 @@ end
 
 end
 
+@with_kw struct Inputs
+
+    node::Node
+    cross_section::CrossSection
+    material::Material
+    connection::Connection
+    element::Element
+    support::Support
+    uniform_load::UniformLoad
+    point_load::PointLoad
+    analysis_type::String
+    solution_tolerance::Union{Float64, Nothing}
+
+end
+
+Inputs(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type) = Inputs(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type, nothing)
 
 @with_kw struct Model
 
+    inputs::Inputs
     properties::ElementProperties
     forces::Union{Forces, Nothing}
     equations::Union{FirstOrderEquations, SecondOrderEquations, ModalEquations}
@@ -636,7 +654,8 @@ function first_order_analysis(node, cross_section, material, connection, element
     reactions[fixed_global_dof] += -forces.global_dof_point_loads[fixed_global_dof]
 
     #add uniform load equivalent nodal forces to rigid support reactions  
-    reactions[fixed_global_dof] += -forces.global_dof_nodal_forces_uniform_load[fixed_global_dof]
+    reactions[fixed_global_dof] += -forces.global_dof_nodal_forces_uniform_load[fixed_global_dof] 
+    # print(fixed_global_dof)
 
     # reactions[fixed_global_dof] -= -forces.global_dof_nodal_forces_uniform_load[fixed_global_dof]
 
@@ -666,7 +685,9 @@ function first_order_analysis(node, cross_section, material, connection, element
 
     solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections, nodal_reactions, u, uf)
 
-    model = Model(element_properties, forces, equations, solution)
+    inputs = Inputs(node, cross_section, material, connection, element, support, uniform_load, point_load, "1st order")
+
+    model = Model(inputs, element_properties, forces, equations, solution)
 
     return model
 
@@ -831,13 +852,15 @@ function solve(node, cross_section, material, connection, element, support, unif
 
     if analysis_type == "first order"
 
-        first_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load)
+        model = first_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load)
 
     elseif analysis_type == "modal vibration"
 
-        modal_vibration_analysis(node, cross_section, material, connection, element, support)
+        model = modal_vibration_analysis(node, cross_section, material, connection, element, support)
 
     end
+
+    return model
 
 end
 
@@ -845,9 +868,11 @@ function solve(node, cross_section, material, connection, element, support, unif
 
     if analysis_type == "second order"
 
-        second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, solution_tolerance)
+        model = second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, solution_tolerance)
 
     end
+
+    return model 
 
 end
 

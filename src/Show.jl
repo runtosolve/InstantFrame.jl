@@ -117,7 +117,7 @@ end
 function get_display_coords_element(u_local_e, node_i_coords, L, Γ, n)
 
     δe, Δe, x = get_element_deformed_shape(u_local_e, L, Γ, n)
-    discretized_element_global_coords = UI.discretized_element_global_coords(node_i_coords, Γ, x)
+    discretized_element_global_coords = Show.discretized_element_global_coords(node_i_coords, Γ, x)
 
     return discretized_element_global_coords, Δe
 
@@ -183,7 +183,7 @@ function define_global_element_displacements(u, global_dof, element, element_con
 
         if !isnothing(index)
 
-            u_global_e[i][[5, 6, 11, 12]] .= element_connections.end_displacements[index][[5, 6, 11, 12]]
+            u_global_e[i][[5, 6, 11, 12]] .= element_connections.displacements[index][[5, 6, 11, 12]]
 
         end
         
@@ -285,9 +285,9 @@ function point_loads!(ax, point_load, node, arrow_scale, arrow_head_scale, unit_
             index = findfirst(num->num==point_load.nodes[i], node.numbers)
             tail_location = node.coordinates[index]
 
-            FX = point_load.loads.FX[i] 
-            FY = point_load.loads.FY[i] 
-            FZ = point_load.loads.FZ[i] 
+            FX = point_load.magnitudes.FX[i] 
+            FY = point_load.magnitudes.FY[i] 
+            FZ = point_load.magnitudes.FZ[i] 
 
             unit_arrow_vector = [FX, FY, FZ] / norm([FX, FY, FZ])
         
@@ -429,13 +429,13 @@ function deformed_shape!(ax, nodal_displacements, global_dof, element, node, pro
 
     end
 
-    u_global_e = InstantFrame.UI.define_global_element_displacements(u, global_dof, element, element_connections)
+    u_global_e = InstantFrame.Show.define_global_element_displacements(u, global_dof, element, element_connections)
     u_local_e = [properties.Γ[i]*u_global_e[i] for i in eachindex(u_global_e)]
 
-    element_display_coords, element_display_Δ = InstantFrame.UI.get_display_coords(element, node, properties, u_local_e, n)
+    element_display_coords, element_display_Δ = InstantFrame.Show.get_display_coords(element, node, properties, u_local_e, n)
 
     for i in eachindex(element_display_coords)
-        InstantFrame.UI.show_element_deformed_shape!(ax, element_display_coords[i], element_display_Δ[i], scale, linecolor)
+        InstantFrame.Show.show_element_deformed_shape!(ax, element_display_coords[i], element_display_Δ[i], scale, linecolor)
     end
 
 end
