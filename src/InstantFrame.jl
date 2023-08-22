@@ -1,18 +1,18 @@
 module InstantFrame
 
-using SparseArrays, StaticArrays, LinearAlgebra, Rotations, Parameters, NonlinearSolve
+using LinearAlgebra, Rotations, Parameters, NonlinearSolve
 
-export Show
-include("Show.jl")
-using .Show
+# export Show
+# include("Show.jl")
+# using .Show
 
-export Report
-include("Report.jl")
-using .Report
+# export Report
+# include("Report.jl")
+# using .Report
 
-export Export
-include("Export.jl")
-using .Export
+# export Export
+# include("Export.jl")
+# using .Export
 
 
 @with_kw mutable struct Material
@@ -848,7 +848,7 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
 end
 
 
-function solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type)
+function solve(node, cross_section, material, connection, element, support, uniform_load, point_load; analysis_type)
 
     if analysis_type == "first order"
 

@@ -1,24 +1,3 @@
-InstantFrame.jl 
-=============
-
-Perform fast structural analysis of 3D frames.  
-
-**Installation**: at the Julia REPL, `using Pkg; Pkg.add(url="https://github.com/runtosolve/InstantFrame.jl.git")`
-
-**Features**:
-
-* first and second order analysis
-* vibration modal analysis
-* pinned and semi-rigid connections and supports
-
-**Formulations and Algorithms**:
-
-Element formulations and solution algorithms are inspired by and validated with [MASTAN2](https://www.mastan2.com/about.html) and the supporting textbook [Matrix Structural Analysis, 2nd Edition, by McGuire, Gallagher, and Ziemian](https://www.mastan2.com/textbook.html). 
-
-**Example**:
-
-```julia
-
 using InstantFrame 
 
 material = InstantFrame.Material(names=["steel"], E=[29500.0], ν=[0.3], ρ=[492.0 / 32.17 / 12^4 / 1000])  ##ρ = kips * s^2 / in^4
@@ -38,10 +17,3 @@ uniform_load = InstantFrame.UniformLoad(labels=["snow", "snow"], elements=[1, 2]
 point_load = InstantFrame.PointLoad(labels = ["lights"], nodes=[4], magnitudes=(FX=[0.0], FY=[-0.500], FZ=[0.0], MX=[0.0], MY=[0.0], MZ=[0.0]))
 
 model = InstantFrame.solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type="first order")
-
-
-```
-
-
-
-

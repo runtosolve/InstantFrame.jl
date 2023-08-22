@@ -1,6 +1,6 @@
 module Show
 
-using GLMakie, InstantFrame, LinearAlgebra
+using CairoMakie, LinearAlgebra
 
 
 function deformed_shape(node, element, u, scale)
