@@ -1,10 +1,16 @@
 module InstantFrame
 
-using LinearAlgebra, Rotations, Parameters, NonlinearSolve
+using LinearAlgebra, Rotations, Parameters, NonlinearSolve, StaticArrays
 
-# export Show
-# include("Show.jl")
-# using .Show
+
+export PlotTools
+include("PlotTools.jl")
+using .PlotTools
+
+export Show
+include("Show.jl")
+using .Show
+
 
 # export Report
 # include("Report.jl")
@@ -170,7 +176,7 @@ end
 
 end
 
-@with_kw struct FirstOrderSolution
+@with_kw struct Solution
 
     displacements::Array{Array{Float64, 1}}
     forces::Array{Array{Float64, 1}}
@@ -182,13 +188,13 @@ end
 end
 
 
-@with_kw struct SecondOrderSolution
+# @with_kw struct SecondOrderSolution
 
-    nodal_displacements::Array{Array{Float64, 1}}
-    element_forces::Array{Array{Float64, 1}}
-    element_connections::ElementConnections
+#     nodal_displacements::Array{Array{Float64, 1}}
+#     element_forces::Array{Array{Float64, 1}}
+#     element_connections::ElementConnections
 
-end
+# end
 
 @with_kw struct ModalSolution
 
@@ -233,7 +239,7 @@ Inputs(node, cross_section, material, connection, element, support, uniform_load
     properties::ElementProperties
     forces::Union{Forces, Nothing}
     equations::Union{FirstOrderEquations, SecondOrderEquations, ModalEquations}
-    solution::Union{FirstOrderSolution, SecondOrderSolution, ModalSolution}
+    solution::Union{Solution, ModalSolution}
 
 end
 
@@ -683,7 +689,7 @@ function first_order_analysis(node, cross_section, material, connection, element
 
     equations = FirstOrderEquations(free_global_dof, fixed_global_dof, elastic_supports, ke_local, ke_global, Ke)
 
-    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections, nodal_reactions, u, uf)
+    solution = Solution(nodal_displacements, element_forces, element_connections, nodal_reactions, u, uf)
 
     inputs = Inputs(node, cross_section, material, connection, element, support, uniform_load, point_load, "1st order")
 
@@ -793,9 +799,11 @@ function second_order_analysis(node, cross_section, material, connection, elemen
  
     equations = SecondOrderEquations(free_global_dof, fixed_global_dof, elastic_supports, ke_local, ke_global, Ke, kg_local, kg_global, Kg)
 
-    solution = FirstOrderSolution(nodal_displacements, element_forces, element_connections, nodal_reactions, u2, u2f)
+    solution = Solution(nodal_displacements, element_forces, element_connections, nodal_reactions, u2, u2f)
 
-    model = Model(element_properties, forces, equations, solution)
+    inputs = Inputs(node, cross_section, material, connection, element, support, uniform_load, point_load, "2st order")
+
+    model = Model(inputs, element_properties, forces, equations, solution)
 
     return model
 
@@ -848,7 +856,7 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
 end
 
 
-function solve(node, cross_section, material, connection, element, support, uniform_load, point_load; analysis_type)
+function solve(node, cross_section, material, connection, element, support, uniform_load, point_load; analysis_type, solution_tolerance)
 
     if analysis_type == "first order"
 
@@ -858,23 +866,27 @@ function solve(node, cross_section, material, connection, element, support, unif
 
         model = modal_vibration_analysis(node, cross_section, material, connection, element, support)
 
+    elseif analysis_type == "second order"
+
+        model = second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, solution_tolerance)
+
     end
 
     return model
 
 end
 
-function solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type, solution_tolerance)
+# function solve(node, cross_section, material, connection, element, support, uniform_load, point_load; analysis_type, solution_tolerance)
 
-    if analysis_type == "second order"
+#     if analysis_type == "second order"
 
-        model = second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, solution_tolerance)
+#         model = second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, solution_tolerance)
 
-    end
+#     end
 
-    return model 
+#     return model 
 
-end
+# end
 
 
 
@@ -1588,50 +1600,51 @@ end # module
 # # end
 
 
-function define_local_3D_mass_matrix(A, L, ρ)
+# function define_local_3D_mass_matrix(A, L, ρ)
 
 
-    m = zeros(Float64, (12, 12))
+#     m = zeros(Float64, (12, 12))
 
-    m[1, 1] = 140
-    m[1, 7] = 70
-    m[2, 2] = 156
-    m[2, 6] = 22L
-    m[2, 8] = 54
-    m[2, 12] = -13L
-    m[3, 3] = 156
-    m[3, 5] = -22L
-    m[3, 9] = 54 
-    m[3, 11] = 13L
-    m[4, 4] = 140Io/A
-    m[4, 10] = 70Io/A
-    m[5, 5] = 4L^2 
-    m[5, 9] =  -13L
-    m[5, 11] = -3L^2
-    m[6, 6] = 4L^2
-    m[6, 8] = 13L
-    m[6, 12] = -3L^2
-    m[7, 7] = 140
-    m[8, 8] = 156
-    m[8, 12] = -22L
-    m[9, 9] = 156
-    m[9, 11] = 22L
-    m[10, 10] = 140Io/A
-    m[11, 11] = 4L^2
-    m[12, 12] = 4L^2
+#     m[1, 1] = 140
+#     m[1, 7] = 70
+#     m[2, 2] = 156
+#     m[2, 6] = 22L
+#     m[2, 8] = 54
+#     m[2, 12] = -13L
+#     m[3, 3] = 156
+#     m[3, 5] = -22L
+#     m[3, 9] = 54 
+#     m[3, 11] = 13L
+#     m[4, 4] = 140Io/A
+#     m[4, 10] = 70Io/A
+#     m[5, 5] = 4L^2 
+#     m[5, 9] =  -13L
+#     m[5, 11] = -3L^2
+#     m[6, 6] = 4L^2
+#     m[6, 8] = 13L
+#     m[6, 12] = -3L^2
+#     m[7, 7] = 140
+#     m[8, 8] = 156
+#     m[8, 12] = -22L
+#     m[9, 9] = 156
+#     m[9, 11] = 22L
+#     m[10, 10] = 140Io/A
+#     m[11, 11] = 4L^2
+#     m[12, 12] = 4L^2
     
-    for i = 1:12
+#     for i = 1:12
 
-        for j = 1:12
+#         for j = 1:12
 
-            m[j, i] = m[i, j]
+#             m[j, i] = m[i, j]
 
-        end
+#         end
         
-    end
+#     end
     
-    m = m .* (ρ*A*L)/420
+#     m = m .* (ρ*A*L)/420
 
-    return m
+#     return m
 
-end
+# end
+
