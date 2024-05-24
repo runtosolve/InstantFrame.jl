@@ -801,7 +801,7 @@ function second_order_analysis(node, cross_section, material, connection, elemen
 
     solution = Solution(nodal_displacements, element_forces, element_connections, nodal_reactions, u2, u2f)
 
-    inputs = Inputs(node, cross_section, material, connection, element, support, uniform_load, point_load, "2st order")
+    inputs = Inputs(node, cross_section, material, connection, element, support, uniform_load, point_load, "2nd order", solution_tolerance)
 
     model = Model(inputs, element_properties, forces, equations, solution)
 
