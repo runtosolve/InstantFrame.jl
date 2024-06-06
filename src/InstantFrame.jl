@@ -576,7 +576,7 @@ function nonlinear_solution(Kff, Ff, u1f)
 
     p = [Kff, Ff]
 
-    u1f = SVector{length(u1f)}(u1f)
+    u1f = MVector{length(u1f)}(u1f)
     # u1f_S = zeros(Float64, length(u1f))
     # u1fSS = [u1f_S[i] for i in eachindex(u1f)]
     probN = NonlinearSolve.NonlinearProblem{false}(residual, u1f, p)
@@ -749,7 +749,7 @@ function second_order_analysis(node, cross_section, material, connection, elemen
     Kff = Ke_ff + Kg_ff
 
     p = [Kff, Ff]
-    u1f = SVector{length(u1f)}(u1f)
+    u1f = MVector{length(u1f)}(u1f)
     probN = NonlinearSolve.NonlinearProblem{false}(residual, u1f, p)
     u2f = NonlinearSolve.solve(probN, NewtonRaphson(), reltol = solution_tolerance)
 
