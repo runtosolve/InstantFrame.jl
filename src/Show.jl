@@ -189,13 +189,13 @@ function deformed_shape!(ax, nodal_displacements, global_dof, element, node, pro
 
     end
 
-    u_global_e = InstantFrame.PlotTools.define_global_element_displacements(u, global_dof, element, element_connections)
+    u_global_e = PlotTools.define_global_element_displacements(u, global_dof, element, element_connections)
     u_local_e = [properties.Γ[i]*u_global_e[i] for i in eachindex(u_global_e)]
 
-    element_display_coords, element_display_Δ = InstantFrame.PlotTools.get_display_coords(element, node, properties, u_local_e, n)
+    element_display_coords, element_display_Δ = PlotTools.get_display_coords(element, node, properties, u_local_e, n)
 
     for i in eachindex(element_display_coords)
-        InstantFrame.PlotTools.show_element_deformed_shape!(ax, element_display_coords[i], element_display_Δ[i], scale, linecolor)
+        PlotTools.show_element_deformed_shape!(ax, element_display_coords[i], element_display_Δ[i], scale, linecolor)
     end
 
 end

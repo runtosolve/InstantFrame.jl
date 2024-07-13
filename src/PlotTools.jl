@@ -63,7 +63,7 @@ end
 
 
 
-function discretized_element_global_coords(node_i_coords, Γ, x)
+function calculate_discretized_element_global_coords(node_i_coords, Γ, x)
 
     local_element_discretized_coords = [zeros(Float64, 3) for i in eachindex(x)]
 
@@ -79,7 +79,7 @@ end
 function get_display_coords_element(u_local_e, node_i_coords, L, Γ, n)
 
     δe, Δe, x = get_element_deformed_shape(u_local_e, L, Γ, n)
-    discretized_element_global_coords = Show.discretized_element_global_coords(node_i_coords, Γ, x)
+    discretized_element_global_coords = calculate_discretized_element_global_coords(node_i_coords, Γ, x)
 
     return discretized_element_global_coords, Δe
 
