@@ -576,7 +576,8 @@ function nonlinear_solution(Kff, Ff, u1f)
 
     p = [Kff, Ff]
 
-    u1f = SVector{length(u1f)}(u1f)
+    # u1f = SVector{length(u1f)}(u1f)
+    u1f = MVector{length(u1f)}(u1f)
     # u1f_S = zeros(Float64, length(u1f))
     # u1fSS = [u1f_S[i] for i in eachindex(u1f)]
     probN = NonlinearSolve.NonlinearProblem{false}(residual, u1f, p)
@@ -749,7 +750,8 @@ function second_order_analysis(node, cross_section, material, connection, elemen
     Kff = Ke_ff + Kg_ff
 
     p = [Kff, Ff]
-    u1f = SVector{length(u1f)}(u1f)
+    # u1f = SVector{length(u1f)}(u1f)
+    u1f = MVector{length(u1f)}(u1f)
     probN = NonlinearSolve.NonlinearProblem{false}(residual, u1f, p)
     u2f = NonlinearSolve.solve(probN, NewtonRaphson(), reltol = solution_tolerance)
 
@@ -856,7 +858,7 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
 end
 
 
-function solve(node, cross_section, material, connection, element, support, uniform_load, point_load; analysis_type, solution_tolerance)
+function solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type, parameters)
 
     if analysis_type == "first order"
 
@@ -868,7 +870,7 @@ function solve(node, cross_section, material, connection, element, support, unif
 
     elseif analysis_type == "second order"
 
-        model = second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, solution_tolerance)
+        model = second_order_analysis(node, cross_section, material, connection, element, support, uniform_load, point_load, parameters.solution_tolerance)
 
     end
 
