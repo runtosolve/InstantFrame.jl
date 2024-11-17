@@ -293,7 +293,7 @@ function define_local_elastic_stiffness_matrix(Iy, Iz, A, J, E, ν, L)
 
     for i = 1:12
 
-        for j = 1:12
+        for j = i+1:12
 
             ke[j, i] = ke[i, j]
 
@@ -404,7 +404,7 @@ function define_rotation_matrix(A, B, β)
     # # matrix of direction cosines
     # γ = RotX(-(ω+β)) * RotZ(-χ) * RotY(-ρ) # add β here to rotate local y-axis to orient cross-section in global coordinate system 
 
-    ω = β
+    ω = β-pi/2
 
     γ = RotYZX(ρ, χ, ω)' #transpose!
 
