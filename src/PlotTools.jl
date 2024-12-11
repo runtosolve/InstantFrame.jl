@@ -123,7 +123,7 @@ function show_element_deformed_shape!(ax, element_XYZ, Δ, scale, color)
     for i=1:(length(X)-1)
 
         # scatterlines!(ax, [X[i], X[i+1]], [Y[i], Y[i+1]], [Z[i], Z[i+1]], markersize = 5)
-        lines!(ax, [X[i] + scale[1] * ΔX[i], X[i+1] + scale[1] * ΔX[i+1]], [Y[i] + scale[2] * ΔY[i], Y[i+1] + scale[2] * ΔY[i+1]], [Z[i] + scale[3] * ΔZ[i], Z[i+1] + scale[3] * ΔZ[i+1]], linestyle=:dash, color=color, linewidth=2)
+        lines!(ax, [X[i] + scale[1] * ΔX[i], X[i+1] + scale[1] * ΔX[i+1]], [Y[i] + scale[2] * ΔY[i], Y[i+1] + scale[2] * ΔY[i+1]], [Z[i] + scale[3] * ΔZ[i], Z[i+1] + scale[3] * ΔZ[i+1]], linestyle=:solid, color=color, linewidth=2)
 
     end
 

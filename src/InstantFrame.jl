@@ -674,7 +674,10 @@ function first_order_analysis(node, cross_section, material, connection, element
     num_dof_per_node = 6 #hard code this for now
     for i in eachindex(support.nodes)
 
-        nodal_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (support.nodes[i]-1)
+        index = findfirst(node->node==support.nodes[i], node.numbers)
+        nodal_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (index - 1)
+
+        # nodal_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (support.nodes[i]-1)
         nodal_reactions[i] = reactions[nodal_dof]
 
     end
@@ -1344,9 +1347,14 @@ function define_global_dof_point_loads(node, point_load)
         for i in eachindex(point_load.nodes)
 
             node_index = findfirst(node_num->node_num == point_load.nodes[i], node.numbers)
-            node_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (node_index-1)
 
-            global_dof_point_loads[node_dof] = nodal_point_loads[i, :]
+            # node_index = findall(node_num->node_num == point_load.nodes[i], node.numbers)
+
+            # for j in eachindex(node_index)
+                node_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (node_index-1)
+
+                global_dof_point_loads[node_dof] += nodal_point_loads[i, :]
+            # end
 
         end
 
