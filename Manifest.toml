@@ -2,7 +2,7 @@
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "67726f5033334d0d45cbe76de1b027bd696c8bb1"
+project_hash = "f64608b527728266326353d2ce52f1ca03833b72"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
@@ -770,7 +770,7 @@ uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
 version = "0.1.5"
 
 [[deps.InstantFrame]]
-deps = ["CairoMakie", "LinearAlgebra", "NonlinearSolve", "Parameters", "Rotations", "StaticArrays"]
+deps = ["LinearAlgebra", "NonlinearSolve", "Parameters", "Rotations", "StaticArrays"]
 path = "."
 uuid = "d4c411e5-b967-4c36-b61c-e426871b3c50"
 version = "0.1.0"
