@@ -18,7 +18,7 @@ node = InstantFrame.Node(numbers=1:length(x), coordinates=coordinates)
 
 num_elem = length(x)-1
 element_connectivity = [(i, i+1) for i=1:num_elem]
-element = InstantFrame.Element(numbers=1:length(element_connectivity), nodes=element_connectivity, orientation=zeros(Float64, length(element_connectivity)), connections=[("rigid", "rigid") for i in eachindex(element_connectivity)], cross_section=["beam" for i in eachindex(element_connectivity)], material=["steel" for i in eachindex(element_connectivity)])
+element = InstantFrame.Element(types=fill("beam", num_elem), numbers=1:length(element_connectivity), nodes=element_connectivity, orientation=zeros(Float64, length(element_connectivity)), connections=[("rigid", "rigid") for i in eachindex(element_connectivity)], cross_section=["beam" for i in eachindex(element_connectivity)], material=["steel" for i in eachindex(element_connectivity)])
 
 support = InstantFrame.Support(nodes=[1, length(x)], stiffness=(uX=[Inf,Inf], uY=[Inf,Inf], uZ=[Inf,Inf], rX=[Inf,Inf], rY=[Inf,Inf], rZ=[Inf,Inf]))
 

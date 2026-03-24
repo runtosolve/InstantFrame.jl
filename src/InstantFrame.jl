@@ -3,13 +3,13 @@ module InstantFrame
 using LinearAlgebra, Rotations, Parameters, NonlinearSolve, StaticArrays
 
 
-export PlotTools
-include("PlotTools.jl")
-using .PlotTools
+# export PlotTools
+# include("PlotTools.jl")
+# using .PlotTools
 
-export Show
-include("Show.jl")
-using .Show
+# export Show
+# include("Show.jl")
+# using .Show
 
 
 # export Report
