@@ -93,6 +93,16 @@ end
 
 PointLoad(nothing) = PointLoad(labels=nothing, nodes=nothing, magnitudes=nothing)
 
+@with_kw mutable struct SourceMass
+
+    labels::Union{Array{String}, Nothing}
+    nodes::Union{Array{Int64}, Nothing}
+    magnitudes::Union{NamedTuple{(:MFX, :MFY, :MFZ, :MMX, :MMY, :MMZ), NTuple{6, Vector{Float64}}}, Nothing}
+
+end
+
+SourceMass(nothing) = SourceMass(labels=nothing, nodes=nothing, magnitudes=nothing)
+
 @with_kw mutable struct ElementProperties
 
     L::Array{Float64}
@@ -226,6 +236,7 @@ end
     support::Support
     uniform_load::UniformLoad
     point_load::PointLoad
+    source_mass::SourceMass
     analysis_type::String
     solution_tolerance::Union{Float64, Nothing}
 
@@ -282,7 +293,7 @@ function define_local_elastic_stiffness_matrix(Iy, Iz, A, J, E, ν, L)
 
     for i = 1:12
 
-        for j = 1:12
+        for j = i+1:12
 
             ke[j, i] = ke[i, j]
 
@@ -832,10 +843,16 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
 
     Ke = InstantFrame.assemble_global_matrix(ke_global, element_properties.global_dof)
 
+    global_dof_source_masses = InstantFrame.define_global_dof_source_masses(node, source_mass)
+
     m_local = [InstantFrame.define_local_3D_mass_matrix(element_properties.A[i], element_properties.L[i], element_properties.Io[i], element_properties.ρ[i]) for i in eachindex(element_properties.L)]
     m_global = [element_properties.Γ[i]'*m_local[i]*element_properties.Γ[i] for i in eachindex(element_properties.L)]
     M = InstantFrame.assemble_global_matrix(m_global, element_properties.global_dof)
-    
+
+    for ii in eachindex(global_dof_source_masses)
+        M[ii,ii] += global_dof_source_masses[ii]        
+    end
+
     Ke_ff = Ke[free_global_dof, free_global_dof]
     Mff = M[free_global_dof, free_global_dof]
 
@@ -854,7 +871,9 @@ function modal_vibration_analysis(node, cross_section, material, connection, ele
 
     solution = ModalSolution(ωn, ϕ)
 
-    model = Model(element_properties, nothing, equations, solution)
+    inputs = Inputs(node, cross_section, material, connection, element, support, source_mass, "modal info")
+
+    model = Model(inputs, element_properties, nothing, equations, solution)
 
     return model
 
@@ -1361,6 +1380,31 @@ function define_global_dof_point_loads(node, point_load)
     end
 
     return global_dof_point_loads
+
+end
+
+function define_global_dof_source_masses(node, source_mass)
+
+
+    num_dof_per_node = 6
+    global_dof_source_masses = zeros(Float64, length(node.numbers)*num_dof_per_node)
+
+    if !isnothing(source_mass.nodes)
+
+        nodal_source_masses = reduce(hcat, collect(source_mass.magnitudes))
+
+        for i in eachindex(source_mass.nodes)
+
+            node_index = findfirst(node_num->node_num == source_mass.nodes[i], node.numbers)
+            node_dof = range(1, num_dof_per_node) .+ num_dof_per_node * (node_index-1)
+
+            global_dof_source_masses[node_dof] = nodal_source_masses[i, :]
+
+        end
+
+    end
+
+    return global_dof_source_masses
 
 end
 
