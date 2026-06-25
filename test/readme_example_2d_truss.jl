@@ -16,4 +16,4 @@ uniform_load = InstantFrame.UniformLoad(labels=["snow", "snow"], elements=[1, 2]
 
 point_load = InstantFrame.PointLoad(labels = ["lights"], nodes=[4], magnitudes=(FX=[0.0], FY=[-0.500], FZ=[0.0], MX=[0.0], MY=[0.0], MZ=[0.0]))
 
-model = InstantFrame.solve(node, cross_section, material, connection, element, support, uniform_load, point_load, analysis_type="first order")
+model = InstantFrame.solve(node, cross_section, material, connection, element, support, uniform_load, point_load, "first order", [])
